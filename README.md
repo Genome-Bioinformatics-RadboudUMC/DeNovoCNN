@@ -59,6 +59,10 @@ conda install -c conda-forge opencv
 
 ## Usage
 
+```bash
+    cd <../DeNovoCNN>
+```
+
 ### Training
 You can train your own network by passing tab-separated files with the following columns:
 <ul>
@@ -105,34 +109,34 @@ The resulting list of variants could be passed as `-vl` parameter. <br>
 To run DeNovoCNN on all possible locations: 
 ```bash
 ./inference.sh \
--w <WORKING_DIRECTORY> \
--cv <CHILD_VCF> \
--fv <FATHER_VCF> \
--mv <MOTHER_VCF> \
--cb <CHILD_BAM> \
--fb <FATHER_BAM> \
--mb <MOTHER_BAM> \
--sm <SNP_MODEL> \
--im <INSERTION_MODEL> \
--dm <DELETION_MODEL> \
--g <REFERENCE_GENOME> \
--o <OUTPUT_FILE_NAME>
+-w=<WORKING_DIRECTORY> \
+-cv=<CHILD_VCF> \
+-fv=<FATHER_VCF> \
+-mv=<MOTHER_VCF> \
+-cb=<CHILD_BAM> \
+-fb=<FATHER_BAM> \
+-mb=<MOTHER_BAM> \
+-sm=<SNP_MODEL> \
+-im=<INSERTION_MODEL> \
+-dm=<DELETION_MODEL> \
+-g=<REFERENCE_GENOME> \
+-o=<OUTPUT_FILE_NAME>
 ```
 
 To run DeNovoCNN on a specified list (VARIANT_LIST_TSV) of locations:
 
 ```bash
 ./inference.sh \
--w <WORKING_DIRECTORY> \
--vl <VARIANT_LIST_TSV>
--cb <CHILD_BAM> \
--fb <FATHER_BAM> \
--mb <MOTHER_BAM> \
--sm <SNP_MODEL> \
--im <INSERTION_MODEL> \
--dm <DELETION_MODEL> \
--g <REFERENCE_GENOME> \
--o <OUTPUT_FILE_NAME>
+-w=<WORKING_DIRECTORY> \
+-vl=<VARIANT_LIST_TSV>
+-cb=<CHILD_BAM> \
+-fb=<FATHER_BAM> \
+-mb=<MOTHER_BAM> \
+-sm=<SNP_MODEL> \
+-im=<INSERTION_MODEL> \
+-dm=<DELETION_MODEL> \
+-g=<REFERENCE_GENOME> \
+-o=<OUTPUT_FILE_NAME>
 ```
 VARIANT_LIST_TSV is a tab-separated file of format:
 > Chromosome | Start position | Reference | Variant | Additional info

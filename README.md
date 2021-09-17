@@ -60,7 +60,7 @@ conda install -c conda-forge opencv
 ## Usage
 
 ```bash
-    cd <../DeNovoCNN>
+    cd .../DeNovoCNN
 ```
 
 ### Training

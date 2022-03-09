@@ -26,7 +26,7 @@ import os
 OVERHANG = 20 #number of nucleotides to each side of the center
 NUCLEOTIDES = 4
 
-IMAGE_CHANNELS = 2 # 3 or 2 : (child, father, mother) or (child, max(father, mother))
+IMAGE_CHANNELS = 3 # 3 or 2 : (child, father, mother) or (child, max(father, mother))
 IMAGE_WIDTH = 4 * (2 * OVERHANG + 1)
 IMAGE_HEIGHT = 160 #Pileup height
 

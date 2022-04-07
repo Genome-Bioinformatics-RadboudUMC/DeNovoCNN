@@ -340,6 +340,8 @@ def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, moth
         dataset[sample] = trio_cfg[sample].get('id', '')
         dataset[f"{sample} BAM"] = trio_cfg[sample]['bam_path']
 
+    print(f"Start apply in parallel, n_jobs={n_jobs}")
+
     # apply models
     dataset = Dataset(dataset=dataset, convert_to_inner_format=convert_to_inner_format)
 

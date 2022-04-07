@@ -155,6 +155,28 @@ class Dataset:
                       'Child BAM', 'Father BAM', 'Mother BAM']].to_csv(output_path, sep='\t', index=False)
 
 
+def get_variant_class(row):
+    """
+    Defining variant type (SNP, insertion, deletion)
+    based on reference and alternative alleles
+
+    Parameters:
+    row: DataFrame row
+
+    Returns:
+    Substitution, Deletion, Insertion or Unknown
+    """
+    reference, variant = row['Reference'], row['Variant']
+
+    if len(reference) == len(variant):
+        return 'Substitution'
+    elif len(reference) > len(variant):
+        return 'Deletion'
+    elif len(reference) < len(variant):
+        return 'Insertion'
+
+    return 'Unknown'
+
 def generate_images_from_folder(folder, save_folder, reference_genome_path, convert_to_inner_format, n_jobs=-1):
     files = glob.glob(f"{folder}/*_*.csv")
 

@@ -4,7 +4,6 @@
 if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "Usage: ./`basename $0` [-wd] [-cv] [-fv] [-mv] [-cb] [-fb] [-mb] [-g] [-o]"
   echo "    -w,--workdir : Path to working directory."
-  echo "    -vl,--variants-list : Path to the file containing list of the variants to check."
   echo "    -cv,--child-vcf : Path to child vcf file."
   echo "    -fv,--father-vcf : Path to father vcf file."
   echo "    -mv,--mother-vcf : Path to mother vcf file."
@@ -14,7 +13,8 @@ if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "    -sm,--snp-model : Path to SNP model."
   echo "    -im,--in-model : Path to insertion model."
   echo "    -dm,--del-model : Path to deletion model."
-  echo "    -g,--genome : Path to the reference genome fasta file."
+  echo "    -r,--region : Region to analyse."
+  echo "    -g,--genome : Reference genome path."
   echo "    -o,--output : Output file name (will be saved to workdir)."
   exit 0
 fi
@@ -25,10 +25,6 @@ do
 case $i in
     -w=*|--workdir=*)
     WORKDIR="${i#*=}"
-    shift
-    ;;
-    -vl=*|--variants-list=*)
-    VARIANTS_LIST="${i#*=}"
     shift
     ;;
     -cv=*|--child-vcf=*)
@@ -67,6 +63,10 @@ case $i in
     DEL_MODEL="${i#*=}"
     shift
     ;;
+    -r=*|--region=*)
+    REGION="${i#*=}"
+    shift
+    ;;
     -g=*|--genome=*)
     GENOME="${i#*=}"
     shift
@@ -83,15 +83,15 @@ done
 
 # Check the correctness of the arguments
 # VCFs
-if [[ (${CHILD_VCF} = "") && (${VARIANTS_LIST} = "") ]]; then
+if [[ (${CHILD_VCF} = "") ]]; then
     echo "Error: Path to child vcf file --child-vcf must be provided!"
     exit
 fi
-if [[ (${FATHER_VCF} = "") && (${VARIANTS_LIST} = "") ]]; then
+if [[ (${FATHER_VCF} = "") ]]; then
     echo "Error: Path to father vcf file --father-vcf must be provided!"
     exit
 fi
-if [[ (${MOTHER_VCF} = "") && (${VARIANTS_LIST} = "") ]]; then
+if [[ (${MOTHER_VCF} = "")]]; then
     echo "Error: Path to mother vcf file --mother-vcf must be provided!"
     exit
 fi
@@ -140,72 +140,72 @@ echo "Start preprocessing step..."
 
 mkdir $WORKDIR
 
-# Create variants list if no VARIANTS_LIST is specified
-if [[ ${VARIANTS_LIST} = "" ]]; then
-    # create variant list file by excluding the obviously inherited variants
-    echo "Creating variant list file by excluding the obviously inherited variants..."
- 
-    ## copy or create child gziped vcf 
-    if [ $CHILD_VCF =  *"gz" ]; then
-        cp $CHILD_VCF $WORKDIR/child.vcf.gz
-    else
-        bcftools sort $CHILD_VCF > $WORKDIR/child.vcf
-        bgzip $WORKDIR/child.vcf
-    fi
-    BGZIPPED_CHILD_VCF=$WORKDIR/child.vcf.gz
-    tabix  -p vcf $BGZIPPED_CHILD_VCF
-    
-    ## copy or create father gziped vcf
-    if [ $FATHER_VCF =  *"gz" ]; then
-        cp $FATHER_VCF $WORKDIR/father.vcf.gz
-    else
-        bcftools sort $FATHER_VCF > $WORKDIR/father.vcf
-        bgzip $WORKDIR/father.vcf
-    fi
-    BGZIPPED_FATHER_VCF=$WORKDIR/father.vcf.gz
-    tabix  -p vcf $BGZIPPED_FATHER_VCF
-    
-    ## copy or create mother gziped vcf
-    if [ $MOTHER_VCF =  *"gz" ]; then
-        cp $MOTHER_VCF $WORKDIR/mother.vcf.gz
-    else
-        bcftools sort $MOTHER_VCF > $WORKDIR/mother.vcf
-        bgzip $WORKDIR/mother.vcf
-    fi
-    BGZIPPED_MOTHER_VCF=$WORKDIR/mother.vcf.gz
-    tabix  -p vcf $BGZIPPED_MOTHER_VCF
-    
-    ## create variant list file by excluding the obviously inherited variants
+
+# create variant list file by excluding the obviously inherited variants
+echo "Creating variant list file by excluding the obviously inherited variants..."
+
+## copy or create child gziped vcf
+if [ $CHILD_VCF =  "*gz" ]; then
+    cp $CHILD_VCF $WORKDIR/child.vcf.gz
+else
+    bcftools sort $CHILD_VCF > $WORKDIR/child.vcf
+    bgzip $WORKDIR/child.vcf
+fi
+BGZIPPED_CHILD_VCF=$WORKDIR/child.vcf.gz
+tabix  -p vcf $BGZIPPED_CHILD_VCF
+
+## copy or create father gziped vcf
+if [ $FATHER_VCF =  "*gz" ]; then
+    cp $FATHER_VCF $WORKDIR/father.vcf.gz
+else
+    bcftools sort $FATHER_VCF > $WORKDIR/father.vcf
+    bgzip $WORKDIR/father.vcf
+fi
+BGZIPPED_FATHER_VCF=$WORKDIR/father.vcf.gz
+tabix  -p vcf $BGZIPPED_FATHER_VCF
+
+## copy or create mother gziped vcf
+if [ $MOTHER_VCF =  "*gz" ]; then
+    cp $MOTHER_VCF $WORKDIR/mother.vcf.gz
+else
+    bcftools sort $MOTHER_VCF > $WORKDIR/mother.vcf
+    bgzip $WORKDIR/mother.vcf
+fi
+BGZIPPED_MOTHER_VCF=$WORKDIR/mother.vcf.gz
+tabix  -p vcf $BGZIPPED_MOTHER_VCF
+
+## create variant list file by excluding the obviously inherited variants
+if [[ ${REGION} = "" ]]; then
     bcftools isec -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list.txt
     VARIANTS_LIST=$WORKDIR/variants_list.txt
-    
-    echo "Variants list created in:"
-    echo $VARIANTS_LIST
+else
+    bcftools isec -r $REGION -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list_chr${REGION}.txt
+    bcftools isec -r chr${REGION} -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF >> $WORKDIR/variants_list_chr${REGION}.txt
+    VARIANTS_LIST=$WORKDIR/variants_list_chr${REGION}.txt
 fi
 
+echo "Variants list created in:"
+echo $VARIANTS_LIST
+
 echo "Preprocessing step finished."
-
-
 echo "Running DenovoCNN..."
 
 # Run Python command
 KERAS_BACKEND=tensorflow python ./main.py \
 --mode=predict \
---genome=$GENOME \
---child-bam=$CHILD_BAM \
---father-bam=$FATHER_BAM \
---mother-bam=$MOTHER_BAM \
---snp-model=$SNP_MODEL \
---in-model=$IN_MODEL \
---del-model=$DEL_MODEL \
---variants-list=$VARIANTS_LIST \
---create-filtered-file=true \
+--ref_genome=$GENOME \
+--child_bam=$CHILD_BAM \
+--father_bam=$FATHER_BAM \
+--mother_bam=$MOTHER_BAM \
+--snp_model=$SNP_MODEL \
+--ins_model=$IN_MODEL \
+--del_model=$DEL_MODEL \
+--variants_list=$VARIANTS_LIST \
 --output=$WORKDIR/$OUTPUT
 
 echo "DenovoCNN finished."
 echo "Output in:"
 echo $WORKDIR/$OUTPUT
-
 
 # Cleanup
 rm $WORKDIR/child.vcf.gz*

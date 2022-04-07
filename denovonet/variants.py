@@ -24,10 +24,10 @@ import pysam
 import numpy as np
 import cv2
 from PIL import Image
-import itertools
 
-from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS, NUCLEOTIDES
-from denovonet.encoders import baseEncoder, VariantClassValue
+from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT
+from denovonet.encoders import baseEncoder
+
 
 class SingleVariant():
     """
@@ -359,6 +359,7 @@ class SingleVariant():
         
         return result
 
+
 class TrioVariant():
     """
         Class for merging 3 objects of SingleVariant class
@@ -435,7 +436,7 @@ class TrioVariant():
         """
         expanded_image = np.expand_dims(self.image, axis=0)
         normalized_image = expanded_image.astype(float) / 255
-        prediction = model.predict(preprocess_image(normalized_image))
+        prediction = model.predict(normalized_image)
         return prediction
 
     @staticmethod
@@ -469,34 +470,5 @@ class TrioVariant():
         image = Image.open(image_path)
         normalized_image = np.array(image).astype(float) / 255
         expanded_image = np.expand_dims(normalized_image, axis=0)
-        prediction = model.predict(preprocess_image(expanded_image))
+        prediction = model.predict(expanded_image)
         return prediction
-
-
-def preprocess_image(img):
-    """
-        Preprocess RGB image before passing to the network
-    """
-    if IMAGE_CHANNELS == 2:
-        if (len(img.shape) == 3) and (img.shape[2] == 3):
-            n1, n2, n3 = img.shape
-            img_new = np.zeros(shape=(n1, n2, n3 - 1))
-            
-            img_new[:, :, 0] = img[:, :, 0].copy()
-            img_new[:, :, 1] = np.maximum(img[:, :, 1], img[:, :, 2]).copy()
-
-            return img_new
-
-        elif (len(img.shape) == 4)  and (img.shape[3] == 3):
-            n1, n2, n3, n4 = img.shape
-            img_new = np.zeros(shape=(n1, n2, n3, n4 - 1))
-            
-            img_new[:, :, :, 0] = img[:, :, :, 0].copy()
-            img_new[:, :, :, 1] = np.maximum(img[:, :, :, 1], img[:, :, :, 2]).copy()
-
-            return img_new
-
-        else:
-            raise Exception("Shape of the image is incorrect:", img.shape)
-
-    return img

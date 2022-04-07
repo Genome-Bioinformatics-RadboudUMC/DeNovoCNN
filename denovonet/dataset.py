@@ -20,374 +20,333 @@ You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
+import os
+import sys
 import numpy as np
 import pandas as pd
+import multiprocessing as mp
+import datetime
+from functools import partial
+import glob
 import cv2
-import os
-
-from denovonet.settings import IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS, NUCLEOTIDES
-
+import pysam
+import tensorflow as tf
 from denovonet.variants import SingleVariant, TrioVariant
-from denovonet.encoders import VariantInheritance
 
-class Dataset():
 
+class Dataset:
     """
-    Generates training dataset based on a list of variants in a TSV file
-    
+    class Dataset helps to standartize variants for DeNovoCNN,
+    saves variants as images in parallel (for training) and applies DeNovoCNN in parallel on variants list
     """
-    
-    def __init__(self, variants_path, train_val, REFERENCE_GENOME):
-        """
-        variants_path : str
-            path to file containing a list of DNMs
-        train_val : str
-            tag whether the dataset is 'train' or 'val'
-        REFERENCE_GENOME: pysam.FastaFile
-            reference genome FastaFile object          
-        """
-        self.variants_path = variants_path
-        self.train_val = train_val
-        self.REFERENCE_GENOME = REFERENCE_GENOME
+    def __init__(self, dataset=None, convert_to_inner_format=True):
 
-        # load data
-        self.variants_dataframe = pd.read_csv(self.variants_path, sep='\t')
-        self.variants_dataframe = self.variants_dataframe[['Child',
-            'Father',
-            'Mother',
-            'Chromosome',
-            'Start position',
-            'End position',
-            'De novo assessment',
-            'Reference',
-            'Variant',
-            'Child_BAM',
-            'Father_BAM',
-            'Mother_BAM'
-        ]].fillna('')
-        
-        self.variants_array = np.array(self.variants_dataframe)
+        self.convert_to_inner = convert_to_inner_format
+        self.dataset = dataset
 
-        self.number_variants = len(self.variants_array)
-        
-        # training dataset generation
-        self.x, self.y, self.image_names = self.populate(self.variants_dataframe)
+        # represent variants in unified way
+        self.standartize_variants()
+
+    def standartize_variants(self):
+        self.dataset[['Reference', 'Variant']] = self.dataset[
+            ['Reference', 'Variant']].fillna('').astype(str)
+
+        self.dataset['Variant'] = self.dataset['Variant'].apply(lambda x: str(x).split(','))
+        self.dataset = self.dataset.explode('Variant')
+        self.dataset['Variant'] = self.dataset['Variant'].apply(str.strip)
+
+        self.dataset['Variant type'] = self.dataset.apply(get_variant_class, axis=1)
+
+        # dummy for Target column
+        if 'Target' not in self.dataset.columns:
+            self.dataset['Target'] = ''
+
+        self.dataset = self.dataset.apply(remove_matching_nucleotides, axis=1)
+
+        if self.convert_to_inner:
+            self.dataset.loc[self.dataset['Variant type'] == 'Insertion', 'Start position std'] = (
+                self.dataset.loc[self.dataset['Variant type'] == 'Insertion', 'Start position std'] - 1
+            )
+
+            self.dataset.loc[self.dataset['Variant type'] == 'Insertion', 'End position std'] = (
+                self.dataset.loc[self.dataset['Variant type'] == 'Insertion', 'End position std'] - 1
+            )
+
+    def save_images(self, folder, reference_genome_path, n_jobs=-1):
+        self.dataset['Key'] = (
+                self.dataset['Child'].astype('str') + "_" +
+                self.dataset['Chromosome'].astype('str') + "_" +
+                self.dataset['Start position'].astype('str') + "_" +
+                self.dataset['Reference'].astype('str') + "_" +
+                self.dataset['Variant'].astype('str'))
+
+        # create subdirectories
+        for target_value in self.dataset['Target'].unique().tolist():
+            dir_name = os.path.join(folder, str(target_value))
+
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name)
+
+        # save images in parallel
+        print("\nStart saving images to subdirectories in", folder)
+
+        if n_jobs == -1:
+            # use all CPUs
+            n_jobs = mp.cpu_count()
+
+        print(f"Using {n_jobs} CPUs")
+        sys.stdout.flush()
+        start = datetime.datetime.now()
+
+        pool = mp.Pool(n_jobs)
+
+        _ = pool.map(
+            partial(save_image, folder=folder, reference_genome_path=reference_genome_path),
+            self.dataset[['Chromosome', 'Start position std', 'End position std',
+                          'Variant type', 'Child BAM', 'Father BAM', 'Mother BAM',
+                          'Key', 'Target']].values
+        )
+
+        pool.close()
+        print("Saving images finished, time elapsed:", datetime.datetime.now() - start)
+        sys.stdout.flush()
+
+    def apply_model(self, output_path, models_cfg, reference_genome_path, n_jobs=-1, batch_size=1000):
+
+        # apply models in parallel
+        print("\nStart applying DeNovoCNN")
+
+        if n_jobs == -1:
+            # use all CPUs
+            n_jobs = mp.cpu_count()
+
+        dataset_batches = self.dataset[['Chromosome', 'Start position std', 'End position std',
+                                        'Variant type', 'Child BAM', 'Father BAM', 'Mother BAM'
+                                        ]].values.tolist()
+
+        dataset_batches = [dataset_batches[x:x + batch_size] for x in range(0, len(dataset_batches), batch_size)]
+
+        print(f"Using {n_jobs} CPUs")
+        sys.stdout.flush()
+        start = datetime.datetime.now()
+
+        pool = mp.Pool(n_jobs)
+
+        results = pool.map(
+            partial(apply_model_batch, models_cfg=models_cfg, reference_genome_path=reference_genome_path),
+            dataset_batches
+        )
+
+        pool.close()
+        print("Applying DeNovoCNN finished, time elapsed:", datetime.datetime.now() - start)
+        sys.stdout.flush()
+
+        # flattern results
+        results = [pred for sub_pred in results for pred in sub_pred]
+
+        self.dataset['DeNovoCNN probability'] = [res[0] for res in results]
+        self.dataset['Child coverage'] = [res[1][0] for res in results]
+        self.dataset['Father coverage'] = [res[1][1] for res in results]
+        self.dataset['Mother coverage'] = [res[1][2] for res in results]
+
+        self.dataset[['Chromosome', 'Start position',
+                      'Reference', 'Variant', 'DeNovoCNN probability',
+                      'Child coverage', 'Father coverage', 'Mother coverage',
+                      'Child BAM', 'Father BAM', 'Mother BAM']].to_csv(output_path, sep='\t', index=False)
 
 
-    def get_placeholders(self, number_variants):
-        """
-            Returns placeholders filled with 0s for (image, label) pair.
-        """
-        x = np.zeros((number_variants, IMAGE_HEIGHT, IMAGE_WIDTH, 3))
-        y = np.zeros((number_variants))
-        
-        return x, y
+def generate_images_from_folder(folder, save_folder, reference_genome_path, convert_to_inner_format, n_jobs=-1):
+    files = glob.glob(f"{folder}/*_*.csv")
 
-    def get_image(self, chromosome, start, end, child_bam, father_bam, mother_bam):
-        """
-            Returns RGB image for trio (child_bam, father_bam, mother_bam) in the 
-            location (chromosome, start, end).
-        """
-        
-        child_variant = SingleVariant(chromosome, start, end, child_bam, self.REFERENCE_GENOME)
-        father_variant = SingleVariant(chromosome, start, end,father_bam, self.REFERENCE_GENOME)
-        mother_variant = SingleVariant(chromosome, start, end, mother_bam, self.REFERENCE_GENOME)
+    for dataset_path in files:
+        print("\nLoading images for", dataset_path)
+        dataset_type, variant_type = tuple(dataset_path.split('/')[-1].split('.')[0].split('_'))
 
-        trio_variant = TrioVariant(child_variant, father_variant, mother_variant)
+        full_save_folder = os.path.join(save_folder, variant_type, dataset_type)
 
-        return trio_variant.image
+        dataset = Dataset(dataset=pd.read_csv(dataset_path, sep='\t'), convert_to_inner_format=convert_to_inner_format)
 
-    def get_label(self, assessment):
-        """
-            Returns label based on the assessment value, 
-            generated by our in-house DNM calling tool.
-        """
-        
-        if  assessment in ['MATERNAL','MATERNAL - LOW COVERAGE','MATERNAL - NO EXACT MATCH',
-                           'MV', 'PATERNAL','PATERNAL - LOW COVERAGE', 'PV', 
-                           'PV MV','SHARED','SHARED - LOW COVERAGE']:
-            label = VariantInheritance.IV
-        elif assessment == 'DNM':
-            label = VariantInheritance.DNM
+        dataset.save_images(folder=full_save_folder, reference_genome_path=reference_genome_path, n_jobs=n_jobs)
+
+
+def remove_matching_nucleotides(row):
+    """
+    removes matching nucleotides in Reference and Variant from beginning and end,
+    updates variant positions accordingly,
+    saves the results in new columns
+    :param row: row from a processed dataframe
+    """
+    row['Reference std'] = row['Reference']
+    row['Variant std'] = row['Variant']
+    row['Start position std'] = row['Start position']
+
+    # remove from the end
+    if len(row['Reference std']) == len(row['Variant std']):
+        end_prefix = os.path.commonprefix([row['Reference std'][::-1], row['Variant std'][::-1]])
+
+        row['Reference std'] = row['Reference std'][:(len(row['Reference std']) - len(end_prefix))]
+        row['Variant std'] = row['Variant std'][:(len(row['Variant std']) - len(end_prefix))]
+
+    # remove from the beginning
+    prefix = os.path.commonprefix([row['Reference std'], row['Variant std']])
+
+    row['Start position std'] += len(prefix)
+    row['Reference std'] = row['Reference std'][len(prefix):]
+    row['Variant std'] = row['Variant std'][len(prefix):]
+
+    row['End position std'] = row['Start position std'] + max(len(row['Reference std']), 1)
+
+    return row
+
+
+def load_variant(chromosome, start, end, bam, reference_genome):
+    """
+    SingleVariant class initialization wrapper
+    :param chromosome: chromosome
+    :param start: variant start
+    :param end: variant end
+    :param bam: corresponding bam.cram file
+    :param reference_genome: reference genome AligmnentFile
+    :return: SingleVariant class
+    """
+
+    try:
+        return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+    except (ValueError, KeyError):
+        if chromosome[:3] != 'chr':
+            chromosome = 'chr' + chromosome
+            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+        elif chromosome[:3] == 'chr':
+            chromosome = chromosome[:3]
+            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
         else:
-            raise('Unknown variant assessment {} {} {} {}'.format(assessment))
+            raise
 
-        return label
-    
-    def get_image_name(self, child_id, chromosome, start, reference):
-        """
-            Returns image name for saving based on child ID and variant position.
-        """
-        
-        image_name = str(child_id) + '_' + str(chromosome) + '_' + str(start) + '_' + str(reference)
-        
-        return image_name
 
-    def populate(self, cases_dataframe):
-        
-        """
-            Returns training dataset trio: 
-            (RGB images array, labels list, image filenames for saving list).
-            Iterates over all the variants to generate RGB image, label and image filename.
-        """
-        
-        # Iterate through variants and add them to placeholder
-        
-        case_array = np.array(cases_dataframe)
-        number_variants = len(cases_dataframe)
-        x, y = self.get_placeholders(number_variants)
-        image_names = []
+def get_image(row, reference_genome_path):
+    """
+    creates TrioVariant class object for a corresponding row from a processed dataframe
+    :param row: row from a processed dataframe
+    :param reference_genome_path: path to a reference genome
+    """
+    chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
-        for index, row in enumerate(case_array):
+    # create image
+    reference_genome = pysam.FastaFile(reference_genome_path)
+    child_variant = load_variant(str(chromosome), int(start), int(end), child_bam, reference_genome)
+    father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
+    mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
+    trio_variant = TrioVariant(child_variant, father_variant, mother_variant)
 
-            # First three columns for family IDs
-            child_id, father_id, mother_id = row[0], row[1], row[2]
-            chromosome, start, end = row[3], row[4], row[5]
-            assessment, reference_allele, variant_allele = row[6], row[7], row[8]
-            # Get bam paths
-            child_bam, father_bam, mother_bam = row[9], row[10], row[11]
+    return trio_variant
 
-            # Adjust end coordinates for pysam
-            end += 1
 
-            # Get image and labels
-            image = self.get_image(chromosome, start, end, child_bam, father_bam, mother_bam)
-            label = self.get_label(assessment)
+def save_image(row, folder, reference_genome_path):
+    """
+    saves RGB image for DeNovoCNN for a corresponding row from a processed dataframe
+    :param row: row from a processed dataframe
+    :param folder: folder to place an image
+    :param reference_genome_path: path to a reference genome
+    """
+    chromosome, start, end, var_type, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
-            # Populate entry
-            x[index] = image
-            y[index] = label
-            image_names.append(self.get_image_name(child_id, chromosome, start, reference_allele))
+    trio_variant = get_image(row, reference_genome_path)
 
-            print('Loading variant {} : {} , value {}. {}:{}-{} {} {}'.format(
-                index, assessment, label, chromosome, start, end, reference_allele, variant_allele))
-        
-        image_names = np.array(image_names)
-        
-        # shuffle dataset
-        shuffled_x, shuffled_y, shuffled_image_names = self.shuffle(x, y, image_names)
+    # swap dimensions
+    swapped_image = np.zeros(trio_variant.image.shape)
+    swapped_image[:, :, 0], swapped_image[:, :, 1], swapped_image[:, :, 2] = (
+        trio_variant.image[:, :,2], trio_variant.image[:, :,1], trio_variant.image[:, :, 0])
 
-        return shuffled_x, shuffled_y, shuffled_image_names
+    # save image
+    output_path = os.path.join(folder, target, f"{key}.png")
+    cv2.imwrite(output_path, swapped_image)
 
-    @staticmethod
-    def shuffle(x, y, image_names):
-        """
-            Returns shuffled training dataset
-        """
-        
-        randomize = np.arange(len(x))
-        np.random.shuffle(randomize)
-        
-        shuffled_x = x[randomize].copy()
-        shuffled_y = y[randomize].copy()
-        shuffled_image_names = image_names[randomize].copy()
+    return output_path
 
-        return shuffled_x, shuffled_y, shuffled_image_names
-    
 
-    def save_images(self, IMAGES_FOLDER, DATASET_NAME):
-        """
-            Saves training dataset images to a following folder structure:
-                {IMAGES_FOLDER}/{DATASET_NAME}/{train_val}/dnm/ or
-                {IMAGES_FOLDER}/{DATASET_NAME}/{train_val}/iv/
-        """
-        train_val = self.train_val
-        x_data = self.x
-        y_data = self.y
+def load_models(models_cfg):
+    """
+    loads Substitution, Deletion and Insertion models from paths specified in models_cfg
+    """
+    models_dict = {
+        'Substitution': tf.keras.models.load_model(models_cfg['snp_model'], compile=False),
+        'Deletion': tf.keras.models.load_model(models_cfg['del_model'], compile=False),
+        'Insertion': tf.keras.models.load_model(models_cfg['ins_model'], compile=False)
+    }
 
-        for index, image in enumerate(x_data):
-            label = y_data[index]
-            if label == VariantInheritance.IV:
-                save_path = os.path.join(IMAGES_FOLDER, DATASET_NAME, train_val, 'iv')
-            elif label == VariantInheritance.DNM:
-                save_path = os.path.join(IMAGES_FOLDER, DATASET_NAME, train_val, 'dnm')
-            else:
-                raise('Unknown label {} {} {} {}'.format(label))
-            
-            filename = '{}.png'.format(str(index)+'_'+self.image_names[index])
-            
-            # Save as RGB 
-            reordered_placeholder = np.zeros((image.shape))
-            reordered_placeholder[:,:,0], reordered_placeholder[:,:,1], reordered_placeholder[:,:,2] = image[:,:,2], image[:,:,1], image[:,:,0]
+    return models_dict
 
-            output_path = os.path.join(save_path,filename)
 
-            cv2.imwrite(output_path,reordered_placeholder)
-            print('Saved {} as {}'.format(filename,output_path))
-            
+def apply_model(row, models_dict, reference_genome_path):
+    """
+    applies DeNovoCNN models from models_dict to a corresponding row from a processed dataframe
+    :param row: row from a processed dataframe
+    :param models_dict: contains information about DeNovoCNN models paths
+    :param reference_genome_path: path to a reference genome
+    """
+    _, _, _, var_type, _, _, _ = tuple(row)
 
-class CustomAugmentation(object):
-    """ Defines a custom augmentation class. Randomly applies one of transformations."""
-        
-    def __init__(self, probability=0.9, reads_cropping = False, reads_shuffling = False, multi_nucleotide_snp=False, nucleotides_relabeling=False, channels_switching=False, seed=None):
-        self.probability = probability
-        self.reads_cropping = reads_cropping
-        self.reads_shuffling = reads_shuffling
-        self.multi_nucleotide_snp = multi_nucleotide_snp
-        self.nucleotides_relabeling = nucleotides_relabeling
-        self.channels_switching = channels_switching
-        self.transformations = []
-        
-        if seed:
-            np.random.seed(seed)
+    trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
 
-    def _check_augmentations(self):
-        """
-            Creates augmentations list.
-        """
-        
-        self.transformations = []
+    try:
+        # predict
+        prediction = trio_variant.predict(models_dict[var_type])
+        prediction_dnm = str(round(1. - prediction[0, 0], 3))
 
-        if self.reads_cropping:
-            self.transformations.append(self._reads_cropping)
-        if self.reads_shuffling:
-            self.transformations.append(self._reads_shuffling)
-        if self.multi_nucleotide_snp:
-            self.transformations.append(self._multi_nucleotide_snp)
-        if self.nucleotides_relabeling:
-            self.transformations.append(self._nucleotides_relabeling)
-        if self.channels_switching:
-            self.transformations.append(self._channels_switching)
+        child_coverage = trio_variant.child_variant.start_coverage
+        father_coverage = trio_variant.father_variant.start_coverage
+        mother_coverage = trio_variant.mother_variant.start_coverage
+    except KeyError:
+        print("Failed in:")
+        print("\t", row)
+        raise
 
-    @staticmethod
-    def _reads_cropping(img):
-        """
-            Returns image with randomly cropped reads.
-        """
-        new_img = img.copy()
+    return prediction_dnm, (child_coverage, father_coverage, mother_coverage)
 
-        nreads_c, nreads_f, nreads_m = tuple(np.sum(np.sum(new_img, axis=1) > 0., axis=0))
 
-        nreads_c = max(5, nreads_c) 
-        nreads_f = max(5, nreads_f) 
-        nreads_m = max(5, nreads_m)
+def apply_model_batch(rows, models_cfg, reference_genome_path):
+    """
+    applies  DeNovoCNN models from models_cfg to a batch of rows from a processed dataframe
+    """
+    models_dict = load_models(models_cfg)
+    return [apply_model(row, models_dict, reference_genome_path) for row in rows]
 
-        nreads_c = np.random.choice(np.arange(5, nreads_c + 1))
-        nreads_f = np.random.choice(np.arange(5, nreads_f + 1))
-        nreads_m = np.random.choice(np.arange(5, nreads_m + 1))
 
-        new_img[nreads_c:, :, 0] = 0.
-        new_img[nreads_f:, :, 1] = 0.
-        new_img[nreads_m:, :, 2] = 0.
+def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, mother_bam,
+                         snp_model, del_model, ins_model, ref_genome, convert_to_inner_format, n_jobs):
+    """
+    applies DeNovoCNN models in parallel to all variants specified in variants_list for a trio
+    """
 
-        return new_img
-    
-    @staticmethod
-    def _nucleotides_relabeling(img):
-        """
-            Returns image with nucleotides relabeled (swapped), 
-            for example A->T, T->C, C->G, G->A.
-        """
-        new_img = img.copy()
-        
-        new_ordering = list(range(NUCLEOTIDES))
-        np.random.shuffle(new_ordering)
-        
-        for old_idx, new_idx in enumerate(new_ordering):
-            new_img[:, old_idx::NUCLEOTIDES, :]  = img[:, new_idx::NUCLEOTIDES, :].copy()
-        return new_img
-    
-    
-    @staticmethod
-    def _multi_nucleotide_snp(img):
-        """
-            Returns image with added SNP to the left or
-            to the right of original SNP.
-        """
-        def differ_array(arr):
-            """
-                Randomly changes original array
-            """
-            
-            for_mask = np.sum(np.sum(arr>0, axis=2), axis=0)
-            
-            if np.sum(for_mask>0) == 0:
-                return arr
-            
-            min_val = np.min(for_mask[for_mask>0])
+    trio_cfg = {
+        'Child': {'bam_path': child_bam},
+        'Father': {'bam_path': father_bam},
+        'Mother': {'bam_path': mother_bam}
+    }
 
-            rand_arr = np.random.randint(-8, high=8, size=arr.shape)
-            arr[arr>0] += rand_arr[arr>0]
+    models_cfg = {
+        'snp_model': snp_model,
+        'del_model': del_model,
+        'ins_model': ins_model
+    }
 
-            arr[:, for_mask > min_val, :] //= 3
+    # read variants list
+    variant_cols = ['Chromosome', 'Start position', 'Reference', 'Variant', 'extra']
 
-            arr = np.clip(arr, 0, 255)
-            return arr
+    dataset = pd.read_csv(variants_list, sep='\t', names=variant_cols)
 
-        def get_rearranged_snp(snp, n=1):
-            """
-                Applies random nucleotides relabeling to snp to get different snp.
-            """
-            image_new = np.tile(snp, (1, n, 1))
+    # fill in sample information
+    for sample in trio_cfg:
+        dataset[sample] = trio_cfg[sample].get('id', '')
+        dataset[f"{sample} BAM"] = trio_cfg[sample]['bam_path']
 
-            for i in range(n):
-                image_new[:, i*NUCLEOTIDES:(i+1)*NUCLEOTIDES, :] = CustomAugmentation._nucleotides_relabeling(image_new[:, i*NUCLEOTIDES:(i+1)*NUCLEOTIDES, :])
+    # apply models
+    dataset = Dataset(dataset=dataset, convert_to_inner_format=convert_to_inner_format)
 
-            return image_new
+    dataset.apply_model(
+        output_path=output_path,
+        models_cfg=models_cfg,
+        reference_genome_path=ref_genome,
+        n_jobs=n_jobs,
+        batch_size=1000)
 
-        def insert_snp_left(image, n=1):
-            """
-                Insertion of the new SNP to the left.
-            """
-            image_new = image.copy()
-            image_new[:, :(20-n)*NUCLEOTIDES, :] = image_new[:, n*NUCLEOTIDES:20*NUCLEOTIDES, :].copy()
-            image_new[:, (20-n)*NUCLEOTIDES : 20*NUCLEOTIDES, :] = differ_array(get_rearranged_snp(image_new[:, 20*NUCLEOTIDES : 21*NUCLEOTIDES, :], n))
-            return image_new
-
-        def insert_snp_right(image, n=1):
-            """
-                Insertion of the new SNP to the right.
-            """
-            return insert_snp_left(image[:, ::-1, :], n)[:, ::-1, :]
-
-        func = np.random.choice([insert_snp_left, insert_snp_right])
-        n = np.random.choice(range(1, 3))
-
-        return func(img, n)
-
-    @staticmethod
-    def _reads_shuffling(img):
-        """
-            Shuffling the reads order.
-        """
-        new_img = img.copy()
-
-        nreads_c, nreads_f, nreads_m = tuple(np.sum(np.sum(new_img, axis=1) > 0., axis=0))
-
-        np.random.shuffle(new_img[:nreads_c, :, 0])
-        np.random.shuffle(new_img[:nreads_f, :, 1])
-        np.random.shuffle(new_img[:nreads_m, :, 2])
-        
-        return new_img
-    
-    @staticmethod
-    def _channels_switching(img):
-        """
-            Switching parental channels.
-        """
-        new_img = img.copy()
-        new_img[:, :, 1], new_img[:, :, 2] = new_img[:, :, 2].copy(), new_img[:, :, 1].copy()
-        
-        return new_img
-
-    def __call__(self, img):
-        """
-            Applies random augmentation from the list.
-        """
-        
-        if img.shape[2] != 3:
-            print (img.shape)
-            raise Exception("Wrong image format!")
-        
-        random_number = np.random.random()
-                
-        if random_number > self.probability:
-            pass
-        else:
-            self._check_augmentations()
-            transformation = np.random.choice(self.transformations)
-
-            return transformation(img)
-           
-                
-        return img

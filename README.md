@@ -108,7 +108,7 @@ The resulting list of variants could be passed as `-vl` parameter. <br>
 <br>
 To run DeNovoCNN on all possible locations: 
 ```bash
-./inference.sh \
+./apply_denovocnn.sh \
 -w=<WORKING_DIRECTORY> \
 -cv=<CHILD_VCF> \
 -fv=<FATHER_VCF> \
@@ -126,7 +126,7 @@ To run DeNovoCNN on all possible locations:
 To run DeNovoCNN on a specified list (VARIANT_LIST_TSV) of locations:
 
 ```bash
-./inference.sh \
+./apply_denovocnn.sh \
 -w=<WORKING_DIRECTORY> \
 -vl=<VARIANT_LIST_TSV>
 -cb=<CHILD_BAM> \

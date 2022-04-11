@@ -19,4 +19,8 @@ RUN python -c "import tensorflow"
 COPY . /app
 RUN pip install -e /app
 
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env", "python", "/app/test.py"]
+RUN chmod +x /app/apply_denovocnn.sh
+
+#ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env", "python", "/app/test.py"]
+
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env", "/app/apply_denovocnn.sh"]

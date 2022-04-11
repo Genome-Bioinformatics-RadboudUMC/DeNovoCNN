@@ -4,12 +4,13 @@
 if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "Usage: ./`basename $0` [-wd] [-cv] [-fv] [-mv] [-cb] [-fb] [-mb] [-g] [-o]"
   echo "    -w,--workdir : Path to working directory."
-  echo "    -cv,--child-vcf : Path to child vcf file."
-  echo "    -fv,--father-vcf : Path to father vcf file."
-  echo "    -mv,--mother-vcf : Path to mother vcf file."
-  echo "    -cb,--child-bam : Path to child bam file."
-  echo "    -fb,--father-bam : Path to father bam file."
-  echo "    -mb,--mother-bam : Path to mother bam file."
+  echo "    -v,--variant-list : Path to the list of variants."
+  echo "    -cv,--child-vcf : Path to child vcf file, should be specified if --variant_list is not passed."
+  echo "    -fv,--father-vcf : Path to father vcf file, should be specified if --variant_list is not passed."
+  echo "    -mv,--mother-vcf : Path to mother vcf file, should be specified if --variant_list is not passed."
+  echo "    -cb,--child-bam : Path to child bam/cram file."
+  echo "    -fb,--father-bam : Path to father bam/cram file."
+  echo "    -mb,--mother-bam : Path to mother bam/cram file."
   echo "    -sm,--snp-model : Path to SNP model."
   echo "    -im,--in-model : Path to insertion model."
   echo "    -dm,--del-model : Path to deletion model."
@@ -25,6 +26,10 @@ do
 case $i in
     -w=*|--workdir=*)
     WORKDIR="${i#*=}"
+    shift
+    ;;
+    -v=*|--variant-list=*)
+    VARIANTS_LIST="${i#*=}"
     shift
     ;;
     -cv=*|--child-vcf=*)
@@ -81,19 +86,22 @@ case $i in
 esac
 done
 
+
 # Check the correctness of the arguments
-# VCFs
-if [[ (${CHILD_VCF} = "") ]]; then
-    echo "Error: Path to child vcf file --child-vcf must be provided!"
-    exit
-fi
-if [[ (${FATHER_VCF} = "") ]]; then
-    echo "Error: Path to father vcf file --father-vcf must be provided!"
-    exit
-fi
-if [[ (${MOTHER_VCF} = "")]]; then
-    echo "Error: Path to mother vcf file --mother-vcf must be provided!"
-    exit
+if [[ (${VARIANTS_LIST} = "") ]]; then
+  # VCFs
+  if [[ (${CHILD_VCF} = "") ]]; then
+      echo "Error: Path to child vcf file --child-vcf must be provided!"
+      exit
+  fi
+  if [[ (${FATHER_VCF} = "") ]]; then
+      echo "Error: Path to father vcf file --father-vcf must be provided!"
+      exit
+  fi
+  if [[ (${MOTHER_VCF} = "")]]; then
+      echo "Error: Path to mother vcf file --mother-vcf must be provided!"
+      exit
+  fi
 fi
 
 # BAMs
@@ -140,52 +148,55 @@ echo "Start preprocessing step..."
 
 mkdir $WORKDIR
 
-
 # create variant list file by excluding the obviously inherited variants
-echo "Creating variant list file by excluding the obviously inherited variants..."
 
-## copy or create child gziped vcf
-if [ $CHILD_VCF =  "*gz" ]; then
-    cp $CHILD_VCF $WORKDIR/child.vcf.gz
-else
-    bcftools sort $CHILD_VCF > $WORKDIR/child.vcf
-    bgzip $WORKDIR/child.vcf
+if [[ (${VARIANTS_LIST} = "") ]]; then
+
+  echo "Creating variant list file by excluding the obviously inherited variants..."
+
+  ## copy or create child gziped vcf
+  if [ $CHILD_VCF =  "*gz" ]; then
+      cp $CHILD_VCF $WORKDIR/child.vcf.gz
+  else
+      bcftools sort $CHILD_VCF > $WORKDIR/child.vcf
+      bgzip $WORKDIR/child.vcf
+  fi
+  BGZIPPED_CHILD_VCF=$WORKDIR/child.vcf.gz
+  tabix  -p vcf $BGZIPPED_CHILD_VCF
+
+  ## copy or create father gziped vcf
+  if [ $FATHER_VCF =  "*gz" ]; then
+      cp $FATHER_VCF $WORKDIR/father.vcf.gz
+  else
+      bcftools sort $FATHER_VCF > $WORKDIR/father.vcf
+      bgzip $WORKDIR/father.vcf
+  fi
+  BGZIPPED_FATHER_VCF=$WORKDIR/father.vcf.gz
+  tabix  -p vcf $BGZIPPED_FATHER_VCF
+
+  ## copy or create mother gziped vcf
+  if [ $MOTHER_VCF =  "*gz" ]; then
+      cp $MOTHER_VCF $WORKDIR/mother.vcf.gz
+  else
+      bcftools sort $MOTHER_VCF > $WORKDIR/mother.vcf
+      bgzip $WORKDIR/mother.vcf
+  fi
+  BGZIPPED_MOTHER_VCF=$WORKDIR/mother.vcf.gz
+  tabix  -p vcf $BGZIPPED_MOTHER_VCF
+
+  ## create variant list file by excluding the obviously inherited variants
+  if [[ ${REGION} = "" ]]; then
+      bcftools isec -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list.txt
+      VARIANTS_LIST=$WORKDIR/variants_list.txt
+  else
+      bcftools isec -r $REGION -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list_chr${REGION}.txt
+      bcftools isec -r chr${REGION} -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF >> $WORKDIR/variants_list_chr${REGION}.txt
+      VARIANTS_LIST=$WORKDIR/variants_list_chr${REGION}.txt
+  fi
+
+  echo "Variants list created in:"
+  echo $VARIANTS_LIST
 fi
-BGZIPPED_CHILD_VCF=$WORKDIR/child.vcf.gz
-tabix  -p vcf $BGZIPPED_CHILD_VCF
-
-## copy or create father gziped vcf
-if [ $FATHER_VCF =  "*gz" ]; then
-    cp $FATHER_VCF $WORKDIR/father.vcf.gz
-else
-    bcftools sort $FATHER_VCF > $WORKDIR/father.vcf
-    bgzip $WORKDIR/father.vcf
-fi
-BGZIPPED_FATHER_VCF=$WORKDIR/father.vcf.gz
-tabix  -p vcf $BGZIPPED_FATHER_VCF
-
-## copy or create mother gziped vcf
-if [ $MOTHER_VCF =  "*gz" ]; then
-    cp $MOTHER_VCF $WORKDIR/mother.vcf.gz
-else
-    bcftools sort $MOTHER_VCF > $WORKDIR/mother.vcf
-    bgzip $WORKDIR/mother.vcf
-fi
-BGZIPPED_MOTHER_VCF=$WORKDIR/mother.vcf.gz
-tabix  -p vcf $BGZIPPED_MOTHER_VCF
-
-## create variant list file by excluding the obviously inherited variants
-if [[ ${REGION} = "" ]]; then
-    bcftools isec -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list.txt
-    VARIANTS_LIST=$WORKDIR/variants_list.txt
-else
-    bcftools isec -r $REGION -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > $WORKDIR/variants_list_chr${REGION}.txt
-    bcftools isec -r chr${REGION} -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF >> $WORKDIR/variants_list_chr${REGION}.txt
-    VARIANTS_LIST=$WORKDIR/variants_list_chr${REGION}.txt
-fi
-
-echo "Variants list created in:"
-echo $VARIANTS_LIST
 
 echo "Preprocessing step finished."
 echo "Running DenovoCNN..."
@@ -207,7 +218,9 @@ echo "DenovoCNN finished."
 echo "Output in:"
 echo $WORKDIR/$OUTPUT
 
-# Cleanup
-rm $WORKDIR/child.vcf.gz*
-rm $WORKDIR/father.vcf.gz*
-rm $WORKDIR/mother.vcf.gz*
+if [[ (${VARIANTS_LIST} = "") ]]; then
+  # Cleanup
+  rm $WORKDIR/child.vcf.gz*
+  rm $WORKDIR/father.vcf.gz*
+  rm $WORKDIR/mother.vcf.gz*
+fi

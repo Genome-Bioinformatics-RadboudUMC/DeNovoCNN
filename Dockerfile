@@ -10,19 +10,19 @@ RUN apt-get install ffmpeg libsm6 libxext6  -y
 COPY environment.yml .
 RUN conda env create -f environment.yml
 
-#ENV PATH /opt/conda/envs/tensorflow_env/bin:$PATH
-#ENV CONDA_DEFAULT_ENV tensorflow_env
+ENV PATH /opt/conda/envs/tensorflow_env/bin:$PATH
+ENV CONDA_DEFAULT_ENV tensorflow_env
 
-#
-#RUN echo "Make sure tensorflow is installed:"
-#RUN python -c "import tensorflow"
+
+RUN echo "Make sure tensorflow is installed:"
+RUN python -c "import tensorflow"
 
 COPY . /app
 RUN pip install -e /app
 
 RUN chmod +x /app/apply_denovocnn.sh
 
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env"]
+#ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env"]
 
 #ENTRYPOINT ["/app/apply_denovocnn.sh"]
 CMD ["/app/apply_denovocnn.sh", "--help"]

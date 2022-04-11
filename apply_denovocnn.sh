@@ -201,8 +201,10 @@ fi
 echo "Preprocessing step finished."
 echo "Running DenovoCNN..."
 
+script_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+
 # Run Python command
-KERAS_BACKEND=tensorflow python ./main.py \
+KERAS_BACKEND=tensorflow python $script_path/main.py \
 --mode=predict \
 --ref_genome=$GENOME \
 --child_bam=$CHILD_BAM \

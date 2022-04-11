@@ -22,7 +22,5 @@ RUN pip install -e /app
 
 RUN chmod +x /app/apply_denovocnn.sh
 
-#ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "tensorflow_env"]
-
-#ENTRYPOINT ["/app/apply_denovocnn.sh"]
+WORKDIR /app
 CMD ["/app/apply_denovocnn.sh", "--help"]

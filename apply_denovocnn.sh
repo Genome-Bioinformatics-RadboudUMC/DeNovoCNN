@@ -11,10 +11,10 @@ if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "    -cb,--child-bam : Path to child bam/cram file."
   echo "    -fb,--father-bam : Path to father bam/cram file."
   echo "    -mb,--mother-bam : Path to mother bam/cram file."
-  echo "    -sm,--snp-model : Path to SNP model."
+  echo "    -sm,--snp-model : Path to substitution model."
   echo "    -im,--in-model : Path to insertion model."
   echo "    -dm,--del-model : Path to deletion model."
-  echo "    -r,--region : Region to analyse."
+  echo "    -r,--region : Chromosome to analyse (1, 2, ... 22, X)."
   echo "    -g,--genome : Reference genome path."
   echo "    -o,--output : Output file name (will be saved to workdir)."
   exit 0

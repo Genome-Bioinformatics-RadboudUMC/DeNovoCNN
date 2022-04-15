@@ -129,7 +129,7 @@ The example of DeNovoCNN usage for prediction:
 docker run \
   -v "YOUR_INPUT_DIRECTORY":"/input" \
   -v "YOUR_OUTPUT_DIRECTORY:/output" \
-  our_organization_docker/denovocnn: \
+  gelana/denovocnn: \
   /app/apply_denovocnn.sh\
     -w=/output \
     -cv=/input/<CHILD_VCF> \

@@ -20,41 +20,14 @@ Images are similar to the one that you see below. Each color represents differen
 
 <img src="data/del_dnm.png" alt="drawing" width="420px" height="420px"/>
 
-## Requirements
 
-[Bcftools 1.8](https://samtools.github.io/bcftools/)
-[bgzip 1.4.1](http://www.htslib.org/doc/bgzip.html)
-[tabix 0.2.6](http://www.htslib.org/doc/tabix.html)
-
-Python 3.5  
-Tensorflow 1.10.0  
-Keras 2.2.2  
-Pysam  0.8.4  
-Pandas 0.22.0  
-Pillow 5.2.0  
-Opencv 3.4.2 
-
-## Installation
-Easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. Dockerized version coming up.
+## Manual installation
+We advise to use our docker container. In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. Dockerized version coming up.
 
 ```bash
 #Create environment 
-conda create -n denovocnn python=3.5
-
-#Activate environment 
-conda activate denovocnn
-
-#Install bcftools and tabix+bgzip (single package) 
-conda install -c bioconda bcftools
-conda install -c bioconda tabix
-
-#Install Python libraries
-conda install -c conda-forge tensorflow=1.10.0
-conda install -c conda-forge keras=2.2.2
-conda install -c bioconda pysam
-conda install -c anaconda pandas
-conda install -c anaconda pillow
-conda install -c conda-forge opencv
+cd .../DeNovoCNN
+RUN conda env create -f environment.yml
 ```
 
 ## Usage

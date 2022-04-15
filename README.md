@@ -17,10 +17,6 @@ DeNovoCNN reads BAM files and iterates through potential DNM locations using the
 <br>
 Images are similar to the one that you see below. Each color represents different trio individuals: red - child; green - father; blue - mother. In the example you can see a clear red signal (child reads) in the central position which in this case is a de novo deletion.<br>
 
-
-<img src="data/del_dnm.png" alt="drawing" width="420px" height="420px"/>
-
-
 ## Manual installation
 We advise to use our docker container. In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. Dockerized version coming up.
 

@@ -20,29 +20,13 @@ You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
-import os
-
 # IMAGE PARAMETERS
-OVERHANG = 20 #number of nucleotides to each side of the center
-NUCLEOTIDES = 4
-
-IMAGE_CHANNELS = 2 # 3 or 2 : (child, father, mother) or (child, max(father, mother))
-IMAGE_WIDTH = 4 * (2 * OVERHANG + 1)
-IMAGE_HEIGHT = 160 #Pileup height
-
-CHANNEL_SHAPE = (IMAGE_HEIGHT, IMAGE_WIDTH)
-SINGLETON_SHAPE = (IMAGE_HEIGHT, IMAGE_WIDTH)
-
+OVERHANG = 20 # number of nucleotides to each side of the center
 PLACEHOLDER_WIDTH = 2 * OVERHANG + 1
 
-IMAGE_SHAPE = (IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS)
+NUCLEOTIDES = 4
 
-MINIMAL_COVERAGE = 7
+IMAGE_CHANNELS = 3 #RGB image
+IMAGE_WIDTH = NUCLEOTIDES * (2 * OVERHANG + 1)
+IMAGE_HEIGHT = 160 # pileup height (= image height)
 
-BATCH_SIZE = 32
-
-VARIANT_CLASSES = ['DNM','IV']    
-NUMBER_CLASSES = len(VARIANT_CLASSES)
-
-MODEL_ARCHITECTURE = 'advanced_cnn_binary' # cnn 
-CLASS_MODE = 'binary' #categorical

@@ -24,10 +24,10 @@ import pysam
 import numpy as np
 import cv2
 from PIL import Image
-import itertools
 
-from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT, IMAGE_CHANNELS, NUCLEOTIDES
-from denovonet.encoders import baseEncoder, VariantClassValue
+from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT
+from denovonet.encoders import baseEncoder
+
 
 class SingleVariant():
     """
@@ -39,11 +39,14 @@ class SingleVariant():
     def __init__(self, chromosome, start, end, bam_path, REREFERENCE_GENOME):
         # variant location
         self.chromosome = chromosome
+
         self.start = int(start)
         self.end = int(end)
         
         # reference genome 
         self.REFERENCE_GENOME = REREFERENCE_GENOME
+        self.reference_chromosome = chromosome
+        self.check_reference_chromosome()
 
         # bam file
         self.bam_path = bam_path
@@ -69,7 +72,7 @@ class SingleVariant():
     # reference sequence in variant location +- N positions
     @property
     def region_reference_sequence(self):
-        return self.REFERENCE_GENOME.fetch(self.chromosome, self.region_start+1, self.region_end+2)
+        return self.REFERENCE_GENOME.fetch(self.reference_chromosome, self.region_start+1, self.region_end+2)
     
     # variant location
     @property
@@ -86,7 +89,16 @@ class SingleVariant():
     def start_coverage(self):
         start_coverage_arrays = self.bam_data.count_coverage(self.chromosome, self.start-1, self.start)
         return sum([coverage[0] for coverage in start_coverage_arrays])
-    
+
+    def check_reference_chromosome(self):
+        if self.reference_chromosome not in self.REFERENCE_GENOME.references:
+            if self.reference_chromosome[:3] != 'chr' and ('chr' + self.reference_chromosome) in self.REFERENCE_GENOME.references:
+                self.reference_chromosome = 'chr' + self.reference_chromosome
+            elif self.reference_chromosome[:3] == 'chr' and self.reference_chromosome[3:] in self.REFERENCE_GENOME.references:
+                self.reference_chromosome = self.reference_chromosome[:3]
+            else:
+                raise Exception("Chromosome for reference should be one of ", self.REFERENCE_GENOME.references)
+
     def encode_pileup(self):
         """
             Iterates over all the reads in the area of interest and
@@ -117,7 +129,8 @@ class SingleVariant():
         quality = np.zeros((PLACEHOLDER_WIDTH, ))
 
         # get reference genome for read
-        self._ref = self.REFERENCE_GENOME.fetch(self.chromosome, self._read.reference_start, self._read.reference_start + 2*len(read.seq))
+        self._ref = self.REFERENCE_GENOME.fetch(self.reference_chromosome, self._read.reference_start,
+                                                self._read.reference_start + 2*len(read.seq))
         
         # offset if reference_start before interest area [start - OVERHANG - 1, start + OVERHANG -1]
         offset = max(0, (self.start - OVERHANG - 1) - read.reference_start)
@@ -346,6 +359,7 @@ class SingleVariant():
         
         return result
 
+
 class TrioVariant():
     """
         Class for merging 3 objects of SingleVariant class
@@ -422,7 +436,7 @@ class TrioVariant():
         """
         expanded_image = np.expand_dims(self.image, axis=0)
         normalized_image = expanded_image.astype(float) / 255
-        prediction = model.predict(preprocess_image(normalized_image))
+        prediction = model.predict(normalized_image)
         return prediction
 
     @staticmethod
@@ -456,34 +470,5 @@ class TrioVariant():
         image = Image.open(image_path)
         normalized_image = np.array(image).astype(float) / 255
         expanded_image = np.expand_dims(normalized_image, axis=0)
-        prediction = model.predict(preprocess_image(expanded_image))
+        prediction = model.predict(expanded_image)
         return prediction
-
-
-def preprocess_image(img):
-    """
-        Preprocess RGB image before passing to the network
-    """
-    if IMAGE_CHANNELS == 2:
-        if (len(img.shape) == 3) and (img.shape[2] == 3):
-            n1, n2, n3 = img.shape
-            img_new = np.zeros(shape=(n1, n2, n3 - 1))
-            
-            img_new[:, :, 0] = img[:, :, 0].copy()
-            img_new[:, :, 1] = np.maximum(img[:, :, 1], img[:, :, 2]).copy()
-
-            return img_new
-
-        elif (len(img.shape) == 4)  and (img.shape[3] == 3):
-            n1, n2, n3, n4 = img.shape
-            img_new = np.zeros(shape=(n1, n2, n3, n4 - 1))
-            
-            img_new[:, :, :, 0] = img[:, :, :, 0].copy()
-            img_new[:, :, :, 1] = np.maximum(img[:, :, :, 1], img[:, :, :, 2]).copy()
-
-            return img_new
-
-        else:
-            raise Exception("Shape of the image is incorrect:", img.shape)
-
-    return img

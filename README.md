@@ -37,10 +37,7 @@ RUN conda env create -f environment.yml
 ```
 
 ### Prediction
-To use the pretrained models, you can download them separately:
-- [Substitution model](https://drive.google.com/file/d/1YhfoSh5b2HhSS1N1Ii3Jey_qw502VF8I/view?usp=sharing)
-- [Deletion model](https://drive.google.com/file/d/1L89lsobNdlCwzbZHzgWQj47FqDE3ElLG/view?usp=sharing)
-- [Insertion model](https://drive.google.com/file/d/1JHxDT3mNsVfzws3D9cjHWFsqrAuz-Fmf/view?usp=sharing)
+To use the pretrained models, you can provide the paths to the models from 'models' folder. 
 
 <b>Important: denovoCNN expects recallibrated BAM files using BQSR, more [here](https://gatk.broadinstitute.org/hc/en-us/articles/360035890531-Base-Quality-Score-Recalibration-BQSR-).</b> VCF files can be generated using your preffered variant caller.<br>
 

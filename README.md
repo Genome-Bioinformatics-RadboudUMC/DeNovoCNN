@@ -80,10 +80,10 @@ singularity run -B YOUR_INPUT_DIRECTORY:/input,YOUR_OUTPUT_DIRECTORY:/output \
 ```
 
 
-### Prediction
+### Manual prediction
 To use the pretrained models, you can provide the paths to the models from 'models' folder. 
 
-If you're running denovoCNN on WGS data, it is recommended to split the VCF files or variants of interest into 10 or more parts and run each of them separately and if possible in parallel. The separation could be done using the following commands:
+If you're running DeNovoCNN on WGS data, it is recommended to split the VCF files or variants of interest into 10 or more parts and run each of them separately and if possible in parallel. The separation could be done using the following commands:
 ```bash
    bcftools isec -C $BGZIPPED_CHILD_VCF $BGZIPPED_FATHER_VCF $BGZIPPED_MOTHER_VCF > all_variants.txt
    split -d -l 10000 --additional-suffix=.txt all_variants.txt part_variants

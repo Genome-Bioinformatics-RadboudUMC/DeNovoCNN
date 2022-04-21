@@ -21,6 +21,7 @@ COPY . /app
 RUN pip install -e /app
 
 RUN chmod +x /app/apply_denovocnn.sh
+RUN chmod --recursive 755 /app/models
 
 WORKDIR /app
 CMD ["/app/apply_denovocnn.sh", "--help"]

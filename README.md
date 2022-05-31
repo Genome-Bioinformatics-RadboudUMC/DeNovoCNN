@@ -1,8 +1,8 @@
 # DeNovoCNN
 
-A deep learning approach to call de novo mutations (DNMs) on whole-exome (WES) and whole-genome sequencing (WGS) data. DeNovoCNN uses trio recalibrated BAM/CRAM + VCF (or tab-separated list of variants) files to generate image-like genomic sequence representations and detect DNMs with high accuracy. <br>
+A deep learning approach to call de novo mutations (DNMs) on whole-exome (WES) and whole-genome sequencing (WGS) data. DeNovoCNN uses trio BAM/CRAM + VCF (or tab-separated list of variants) files to generate image-like genomic sequence representations and detect DNMs with high accuracy. <br>
 <br>
-DeNovoCNN is a combination of three models for the calling of substitution, deletion and insertion DNMs. Each of the model is a 9-layers CNN with [squeeze-and-excitation](https://arxiv.org/pdf/1709.01507.pdf) blocks. DeNovoCNN is trained on ~16k manually curated DNM and IV (inherited and non-DNM variants) sequencing data, generated using [Illumina](https://www.illumina.com/) sequencer and [Sureselect Human
+DeNovoCNN is a combination of three models for the calling of substitution, deletion and insertion DNMs. Each of the model is a 9-layers CNN with [squeeze-and-excitation](https://arxiv.org/pdf/1709.01507.pdf) blocks. DeNovoCNN is trained on ~50k manually curated DNM and IV (inherited and non-DNM variants) sequencing data, generated using [Illumina](https://www.illumina.com/) sequencer and [Sureselect Human
 All Exon V5](https://www.agilent.com/cs/library/datasheets/public/AllExondatasheet-5990-9857EN.pdf)/[Sureselect Human
 All Exon V4](https://www.agilent.com/cs/library/flyers/Public/5990-9857en_lo.pdf) capture kits.  <br>
 <br>
@@ -15,10 +15,9 @@ We used **DNM posterior probability >= 0.5** to create a filtered tab-separated 
 
 DeNovoCNN reads BAM files and iterates through potential DNM locations using the input VCF files to generate snapshots of genomic regions. It stacks trio BAM files to generate and RGB image representation which are passed into a CNN with squeeze-and-excitation blocks to classify each image as either DNM or IV (inherited variant, non-DNM).<br>
 <br>
-Images are similar to the one that you see below. Each color represents different trio individuals: red - child; green - father; blue - mother. In the example you can see a clear red signal (child reads) in the central position which in this case is a de novo deletion.<br>
 
 ## Manual installation
-We advise to use our docker container. In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. 
+We advise to use our docker container (see Usage section). In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. 
 
 ```bash
 #Create environment 

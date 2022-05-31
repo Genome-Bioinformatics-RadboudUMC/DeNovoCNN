@@ -76,7 +76,7 @@ singularity run -B YOUR_INPUT_DIRECTORY:/input,YOUR_OUTPUT_DIRECTORY:/output \
     --in-model=/app/models/ins \
     --del-model=/app/models/del \
     --genome=/input/<REFERENCE_GENOME> \
-    --outputo=predictions.csv
+    --output=predictions.csv
 ```
 
 

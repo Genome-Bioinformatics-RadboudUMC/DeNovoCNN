@@ -82,7 +82,7 @@ class SingleVariant():
     # loaded bam file
     @property
     def bam_data(self):
-        return pysam.AlignmentFile(self.bam_path, "rb")
+        return pysam.AlignmentFile(self.bam_path, "rb", reference_filename=self.REFERENCE_GENOME.filename.decode('utf-8'))
     
     # calculate coverage at variant location
     @property

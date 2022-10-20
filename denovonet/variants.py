@@ -236,7 +236,7 @@ class SingleVariant():
             updates current positions based on cigar_value
         """
         # match
-        if cigar_value == 0:
+        if cigar_value in (0,7,8):
             base_position += cigar_num
             genome_position += cigar_num
         # insertion
@@ -283,7 +283,7 @@ class SingleVariant():
         current_quality = np.zeros_like((picture_step, ))
 
         # match
-        if cigar_value == 0:
+        if cigar_value in (0,7,8):
             current_quality = query_qualities[base_start_position:base_end_position] * mapq // 10
             matching_mask = (
                 np.array(list(seq[base_start_position:base_end_position])) == 
@@ -311,7 +311,7 @@ class SingleVariant():
         current_pileup = np.zeros_like((picture_step, ))
 
         # match and insertion
-        if cigar_value in (0, 1):
+        if cigar_value in (0,1,7,8):
             #encode bases
             sub_seq = self._seq[base_start_position:base_end_position]
             current_pileup = self._get_encodings(cigar_value, sub_seq)

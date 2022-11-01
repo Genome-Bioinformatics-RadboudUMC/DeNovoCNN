@@ -111,7 +111,7 @@ class Dataset:
         print("Saving images finished, time elapsed:", datetime.datetime.now() - start)
         sys.stdout.flush()
 
-    def apply_model(self, output_path, models_cfg, reference_genome_path, n_jobs=-1, batch_size=1000):
+    def apply_model(self, models_cfg, reference_genome_path, n_jobs=-1, batch_size=1000):
 
         # apply models in parallel
         print("\nStart applying DeNovoCNN")
@@ -149,10 +149,19 @@ class Dataset:
         self.dataset['Father coverage'] = [res[1][1] for res in results]
         self.dataset['Mother coverage'] = [res[1][2] for res in results]
 
-        self.dataset[['Chromosome', 'Start position',
-                      'Reference', 'Variant', 'DeNovoCNN probability',
-                      'Child coverage', 'Father coverage', 'Mother coverage',
-                      'Child BAM', 'Father BAM', 'Mother BAM']].to_csv(output_path, sep='\t', index=False)
+    def save_dataset(self, output_path, output_denovocnn_format=False):
+        if output_denovocnn_format == 'true':
+            output_columns = ['Chromosome', 'Start position std', 'End position std',
+                              'Reference std', 'Variant std', 'DeNovoCNN probability',
+                              'Child coverage', 'Father coverage', 'Mother coverage',
+                              'Child BAM', 'Father BAM', 'Mother BAM']
+        else:
+            output_columns = ['Chromosome', 'Start position',
+                              'Reference', 'Variant', 'DeNovoCNN probability',
+                              'Child coverage', 'Father coverage', 'Mother coverage',
+                              'Child BAM', 'Father BAM', 'Mother BAM']
+
+        self.dataset[output_columns].to_csv(output_path, sep='\t', index=False)
 
 
 def get_variant_class(row):
@@ -335,7 +344,8 @@ def apply_model_batch(rows, models_cfg, reference_genome_path):
 
 
 def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, mother_bam,
-                         snp_model, del_model, ins_model, ref_genome, convert_to_inner_format, n_jobs):
+                         snp_model, del_model, ins_model, ref_genome, output_denovocnn_format,
+                         convert_to_inner_format, n_jobs):
     """
     applies DeNovoCNN models in parallel to all variants specified in variants_list for a trio
     """
@@ -368,9 +378,11 @@ def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, moth
     dataset = Dataset(dataset=dataset, convert_to_inner_format=convert_to_inner_format)
 
     dataset.apply_model(
-        output_path=output_path,
         models_cfg=models_cfg,
         reference_genome_path=ref_genome,
         n_jobs=n_jobs,
         batch_size=1000)
+
+    dataset.save_dataset(output_path=output_path,
+                         output_denovocnn_format=output_denovocnn_format)
 

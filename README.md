@@ -50,7 +50,7 @@ docker run \
     --in-model=/app/models/ins \
     --del-model=/app/models/del \
     --genome=/input/<REFERENCE_GENOME> \
-    --outputo=predictions.csv
+    --output=predictions.csv
 ```
 Parameters description and usage are described earlier in the previous section. 
 

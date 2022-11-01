@@ -54,6 +54,10 @@ parser.add_argument('--mother_bam', dest='mother_bam',
 parser.add_argument('--ref_genome', dest='ref_genome',
                     type=str, help='Path to reference genome file.')
 
+parser.add_argument('--output_denovocnn_format', dest='output_denovocnn_format', type=str,
+                    help='Should be true or false, default: false. ' +
+                         'If set to true, the output file will contain normalized variants and end coordinate')
+
 parser.add_argument('--output_path', dest='output_path', default='output.txt', type=str,
                     help='Path to output file with DeNovoCNN predictions.')
 
@@ -79,6 +83,7 @@ if __name__ == "__main__":
             del_model=args.del_model,
             ins_model=args.ins_model,
             ref_genome=args.ref_genome,
+            output_denovocnn_format=args.output_denovocnn_format,
             convert_to_inner_format=True,
             n_jobs=-1
         )

@@ -2,7 +2,7 @@
 
 # Help command
 if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
-  echo "Usage: ./`basename $0` [-wd] [-cv] [-fv] [-mv] [-cb] [-fb] [-mb] [-g] [-o]"
+  echo "Usage: ./`basename $0` [-wd] [-v] [-cv] [-fv] [-mv] [-cb] [-fb] [-mb] [-sm] [-im] [-dm] [-r] [-g] [-df] [-o]"
   echo "    -w,--workdir : Path to working directory."
   echo "    -v,--variant-list : Path to the list of variants."
   echo "    -cv,--child-vcf : Path to child vcf file, should be specified if --variant_list is not passed."
@@ -16,6 +16,7 @@ if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "    -dm,--del-model : Path to deletion model."
   echo "    -r,--region : Chromosome to analyse (1, 2, ... 22, X)."
   echo "    -g,--genome : Reference genome path."
+  echo "    -df,--output_denovocnn_format: true or false,  default: false. If set to true, the output file will contain normalized variants and end coordinate."
   echo "    -o,--output : Output file name (will be saved to workdir)."
   exit 0
 fi
@@ -74,6 +75,10 @@ case $i in
     ;;
     -g=*|--genome=*)
     GENOME="${i#*=}"
+    shift
+    ;;
+    -df=*|--output_denovocnn_format=*)
+    OUTPUT_DENOVOCNN_FORMAT="${i#*=}"
     shift
     ;;
     -o=*|--output=*)
@@ -135,6 +140,16 @@ fi
 # Reference genome
 if [[ ${GENOME} = "" ]]; then
     echo "Error: GENOME --genome must be provided!"
+    exit
+fi
+
+# DeNovoCNN format
+if [[ ${OUTPUT_DENOVOCNN_FORMAT} = "" ]]; then
+    OUTPUT_DENOVOCNN_FORMAT="false"
+fi
+
+if [[ ${OUTPUT_DENOVOCNN_FORMAT} != "false" ]] && [[ ${OUTPUT_DENOVOCNN_FORMAT} != "true" ]]; then
+    echo "Error: OUTPUT DENOVOCNN FORMAT--output_denovocnn_format must be true or false!"
     exit
 fi
 
@@ -214,7 +229,8 @@ KERAS_BACKEND=tensorflow python $script_path/main.py \
 --ins_model=$IN_MODEL \
 --del_model=$DEL_MODEL \
 --variants_list=$VARIANTS_LIST \
---output=$WORKDIR/$OUTPUT
+--output_denovocnn_format=$OUTPUT_DENOVOCNN_FORMAT \
+--output_path=$WORKDIR/$OUTPUT
 
 echo "DenovoCNN finished."
 echo "Output in:"

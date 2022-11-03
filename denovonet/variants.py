@@ -35,7 +35,7 @@ class SingleVariant():
     numpy array with nucleotides encoded and 
     numpy array with corresponding base quality encoded
     """
-    
+
     def __init__(self, chromosome, start, end, bam_path, REREFERENCE_GENOME):
         # variant location
         self.chromosome = chromosome
@@ -351,7 +351,7 @@ class SingleVariant():
             return result + baseEncoder.DEL
 
         for idx, base in enumerate(bases):
-            if cigar_value == 0:
+            if cigar_value == in (0,7,8):
                 result[idx] = encoding_match.get(base, 0)
             
             if cigar_value == 1:

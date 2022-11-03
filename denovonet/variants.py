@@ -351,7 +351,7 @@ class SingleVariant():
             return result + baseEncoder.DEL
 
         for idx, base in enumerate(bases):
-            if cigar_value == in (0,7,8):
+            if cigar_value in (0,7,8):
                 result[idx] = encoding_match.get(base, 0)
             
             if cigar_value == 1:

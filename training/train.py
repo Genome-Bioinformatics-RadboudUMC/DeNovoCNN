@@ -19,7 +19,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
 '''
-
+import os
 import argparse
 import torch
 from torch import nn
@@ -27,9 +27,7 @@ import torch.utils.data
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import numpy as np
 from tqdm import tqdm
-import os
 from sklearn.metrics import recall_score, precision_score, accuracy_score
 import onnxruntime as ort
 

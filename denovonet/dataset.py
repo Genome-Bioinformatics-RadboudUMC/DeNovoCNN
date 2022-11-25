@@ -30,7 +30,9 @@ from functools import partial
 import glob
 import cv2
 import pysam
-import tensorflow as tf
+# import tensorflow as tf
+import torch
+import onnxruntime as ort
 from denovonet.variants import SingleVariant, TrioVariant
 
 
@@ -43,6 +45,7 @@ class Dataset:
 
         self.convert_to_inner = convert_to_inner_format
         self.dataset = dataset
+        print("self.dataset", self.dataset)
 
         # represent variants in unified way
         self.standartize_variants()
@@ -134,6 +137,44 @@ class Dataset:
 
         results = pool.map(
             partial(apply_model_batch, models_cfg=models_cfg, reference_genome_path=reference_genome_path),
+            dataset_batches
+        )
+
+        pool.close()
+        print("Applying DeNovoCNN finished, time elapsed:", datetime.datetime.now() - start)
+        sys.stdout.flush()
+
+        # flattern results
+        results = [pred for sub_pred in results for pred in sub_pred]
+
+        self.dataset['DeNovoCNN probability'] = [res[0] for res in results]
+        self.dataset['Child coverage'] = [res[1][0] for res in results]
+        self.dataset['Father coverage'] = [res[1][1] for res in results]
+        self.dataset['Mother coverage'] = [res[1][2] for res in results]
+
+    def apply_model_onnx(self, models_cfg, reference_genome_path, n_jobs=-1, batch_size=1000):
+
+        # apply models in parallel
+        print("\nStart applying DeNovoCNN")
+
+        if n_jobs == -1:
+            # use all CPUs
+            n_jobs = mp.cpu_count()
+
+        dataset_batches = self.dataset[['Chromosome', 'Start position std', 'End position std',
+                                        'Variant type', 'Child BAM', 'Father BAM', 'Mother BAM'
+                                        ]].values.tolist()
+
+        dataset_batches = [dataset_batches[x:x + batch_size] for x in range(0, len(dataset_batches), batch_size)]
+
+        print(f"Using {n_jobs} CPUs")
+        sys.stdout.flush()
+        start = datetime.datetime.now()
+
+        pool = mp.Pool(n_jobs)
+
+        results = pool.map(
+            partial(apply_model_batch_onnx, models_cfg=models_cfg, reference_genome_path=reference_genome_path),
             dataset_batches
         )
 
@@ -260,6 +301,7 @@ def get_image(row, reference_genome_path):
     :param row: row from a processed dataframe
     :param reference_genome_path: path to a reference genome
     """
+    print("row", row)
     chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
     # create image
@@ -307,6 +349,28 @@ def load_models(models_cfg):
 
     return models_dict
 
+def load_models_onnx(models_cfg):
+    """
+    loads Substitution, Deletion and Insertion models from paths specified in models_cfg
+    """
+    providers = ('CUDAExecutionProvider' if torch.cuda.is_available() else 'CPUExecutionProvider')
+    snp_session = ort.InferenceSession(
+        models_cfg['snp_model'], providers=[providers]
+    )
+    insertion_session = ort.InferenceSession(
+        models_cfg['ins_model'], providers=[providers]
+    )
+    deletion_session = ort.InferenceSession(
+        models_cfg['del_model'], providers=[providers]
+    )
+    models_dict = {
+        'Substitution':snp_session,
+        'Deletion': deletion_session,
+        'Insertion': insertion_session,
+    }
+
+    return models_dict
+
 
 def apply_model(row, models_dict, reference_genome_path):
     """
@@ -335,12 +399,48 @@ def apply_model(row, models_dict, reference_genome_path):
     return prediction_dnm, (child_coverage, father_coverage, mother_coverage)
 
 
+def apply_model_onnx(row, models_dict, reference_genome_path):
+    """
+    applies DeNovoCNN models from models_dict to a corresponding row from a processed dataframe
+    :param row: row from a processed dataframe
+    :param models_dict: contains information about DeNovoCNN models paths
+    :param reference_genome_path: path to a reference genome
+    """
+    _, _, _, var_type, _, _, _ = tuple(row)
+
+    trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
+
+    try:
+        # predict
+        prediction = trio_variant.predict_onnx(models_dict[var_type])
+        prediction_dnm = str(round(1. - prediction[0, 1], 3))
+
+        child_coverage = trio_variant.child_variant.start_coverage
+        father_coverage = trio_variant.father_variant.start_coverage
+        mother_coverage = trio_variant.mother_variant.start_coverage
+    except KeyError:
+        print("Failed in:")
+        print("\t", row)
+        raise
+
+    return prediction_dnm, (child_coverage, father_coverage, mother_coverage)
+
+
 def apply_model_batch(rows, models_cfg, reference_genome_path):
     """
     applies  DeNovoCNN models from models_cfg to a batch of rows from a processed dataframe
     """
     models_dict = load_models(models_cfg)
     return [apply_model(row, models_dict, reference_genome_path) for row in rows]
+
+
+def apply_model_batch_onnx(rows, models_cfg, reference_genome_path):
+    """
+    applies  DeNovoCNN models from models_cfg to a batch of rows from a processed dataframe
+    """
+    models_dict = load_models_onnx(models_cfg)
+    print(models_dict)
+    return [apply_model_onnx(row, models_dict, reference_genome_path) for row in rows]
 
 
 def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, mother_bam,
@@ -386,3 +486,45 @@ def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, moth
     dataset.save_dataset(output_path=output_path,
                          output_denovocnn_format=output_denovocnn_format)
 
+
+def apply_models_on_trio_onnx(variants_list, output_path, child_bam, father_bam, mother_bam,
+                         snp_model, del_model, ins_model, ref_genome, output_denovocnn_format,
+                         convert_to_inner_format, n_jobs):
+    """
+    applies DeNovoCNN models in parallel to all variants specified in variants_list for a trio
+    """
+    trio_cfg = {
+        'Child': {'bam_path': child_bam},
+        'Father': {'bam_path': father_bam},
+        'Mother': {'bam_path': mother_bam}
+    }
+
+    models_cfg = {
+        'snp_model': snp_model,
+        'del_model': del_model,
+        'ins_model': ins_model
+    }
+
+    # # read variants list
+    variant_cols = ['Chromosome', 'Start position', 'Reference', 'Variant', 'extra']
+
+    dataset = pd.read_csv(variants_list, sep='\t', names=variant_cols)
+
+    # fill in sample information
+    for sample in trio_cfg:
+        dataset[sample] = trio_cfg[sample].get('id', '')
+        dataset[f"{sample} BAM"] = trio_cfg[sample]['bam_path']
+
+    print(f"Start apply in parallel, n_jobs={n_jobs}")
+
+    # apply models
+    dataset = Dataset(dataset=dataset, convert_to_inner_format=convert_to_inner_format)
+
+    dataset.apply_model_onnx(
+        models_cfg=models_cfg,
+        reference_genome_path=ref_genome,
+        n_jobs=n_jobs,
+        batch_size=1000)
+
+    dataset.save_dataset(output_path=output_path,
+                         output_denovocnn_format=output_denovocnn_format)

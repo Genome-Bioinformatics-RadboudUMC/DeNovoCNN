@@ -1,0 +1,3 @@
+Chromosome	Start position std	End position std	Reference std	Variant std	DeNovoCNN probability	Child coverage	Father coverage	Mother coverage	Child BAM	Father BAM	Mother BAM
+q	186	187	T	C	0.0	41	41	41	fixtures/NA12878.chr22.tiny.bam	fixtures/NA12878.chr22.tiny.bam	fixtures/NA12878.chr22.tiny.bam
+q	1008	1009	C	T	0.0	39	39	39	fixtures/NA12878.chr22.tiny.bam	fixtures/NA12878.chr22.tiny.bam	fixtures/NA12878.chr22.tiny.bam

@@ -21,7 +21,7 @@ along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
 import argparse
-from denovonet.dataset import apply_models_on_trio
+from denovonet.dataset import apply_models_on_trio, apply_models_on_trio_onnx
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Use DeNovoCNN.')
@@ -74,6 +74,22 @@ if __name__ == "__main__":
     # prediction of the DeNovoCNN
     elif args.mode == 'predict':
         apply_models_on_trio(
+            variants_list=args.variants_list,
+            output_path=args.output_path,
+            child_bam=args.child_bam,
+            father_bam=args.father_bam,
+            mother_bam=args.mother_bam,
+            snp_model=args.snp_model,
+            del_model=args.del_model,
+            ins_model=args.ins_model,
+            ref_genome=args.ref_genome,
+            output_denovocnn_format=args.output_denovocnn_format,
+            convert_to_inner_format=True,
+            n_jobs=-1
+        )
+    # prediction of the DeNovoCNN
+    elif args.mode == 'predict_onnx':
+        apply_models_on_trio_onnx(
             variants_list=args.variants_list,
             output_path=args.output_path,
             child_bam=args.child_bam,

@@ -24,9 +24,12 @@ import pysam
 import numpy as np
 import cv2
 from PIL import Image
+from torchvision import transforms
 
 from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT
 from denovonet.encoders import baseEncoder
+from training.utils import ort_inference
+import torch
 
 
 class SingleVariant():
@@ -437,6 +440,18 @@ class TrioVariant():
         expanded_image = np.expand_dims(self.image, axis=0)
         normalized_image = expanded_image.astype(float) / 255
         prediction = model.predict(normalized_image)
+        return prediction
+
+    def predict_onnx(self, model):
+        transform = transforms.Compose([transforms.ToTensor()])
+        input_tensor = transform(self.image).type(torch.FloatTensor) / 255
+        input_tensor = input_tensor[None] #expand dimension
+        device = ('cuda' if torch.cuda.is_available() else 'cpu')
+        input_tensor.to(device)
+        prediction = ort_inference(model, input_tensor)
+        softmax = torch.nn.Softmax(dim=1)
+        prediction = softmax(prediction)
+        prediction = prediction.detach().cpu().numpy()
         return prediction
 
     @staticmethod

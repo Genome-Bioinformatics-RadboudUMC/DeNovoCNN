@@ -28,7 +28,7 @@ from torchvision import transforms
 
 from denovonet.settings import OVERHANG, IMAGE_WIDTH, PLACEHOLDER_WIDTH, IMAGE_HEIGHT
 from denovonet.encoders import baseEncoder
-from training.utils import ort_inference
+from denovonet.training.utils import ort_inference
 import torch
 
 

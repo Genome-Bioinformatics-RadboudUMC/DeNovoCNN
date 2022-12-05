@@ -4,9 +4,3 @@ setup(
     name='denovonet',
     packages=find_packages(),
 )
-
-
-setup(
-    name='training',
-    packages=find_packages(),
-)

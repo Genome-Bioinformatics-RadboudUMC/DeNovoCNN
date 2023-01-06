@@ -1,4 +1,4 @@
-'''
+"""
 utils.py
 
 Copyright (c) 2022 Karolis Sablauskas
@@ -18,21 +18,26 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
-'''
+"""
 
+import glob
+from typing import Callable
+
+import numpy as np
+import pandas as pd
 import torch
 import torchvision
+import tqdm
+from PIL import Image
 from torch.utils.data.sampler import Sampler
-from typing import Callable
-import pandas as pd
-
 
 
 class ImbalancedDatasetSampler(Sampler):
     """
     From https://github.com/ufoym/imbalanced-dataset-sampler
 
-    Samples elements randomly from a given list of indices for imbalanced dataset
+    Samples elements randomly from a given list of
+        indices for imbalanced dataset
     Arguments:
         indices: a list of indices
         num_samples: number of samples to draw
@@ -87,10 +92,14 @@ class ImbalancedDatasetSampler(Sampler):
             raise NotImplementedError
 
     def __iter__(self):
-        return (self.indices[i] for i in torch.multinomial(self.weights, self.num_samples, replacement=True))
+        return (
+            self.indices[i]
+            for i in torch.multinomial(self.weights, self.num_samples, replacement=True)
+        )
 
     def __len__(self):
         return self.num_samples
+
 
 def export_onnx_model(model, image_channels, image_height, image_width, output_path):
     x = torch.randn(
@@ -128,3 +137,53 @@ def ort_inference(session, tensor):
     session.run_with_iobinding(io_binding)
     predictions = torch.from_numpy(io_binding.copy_outputs_to_cpu()[0])
     return predictions
+
+
+def predict_image_path_onxx(image_path: str, model) -> np.array:
+    """
+    Applies the model to RGB image within the image_path
+    and gets DNM prediction
+    """
+    import torch
+    from torchvision import transforms
+
+    image = np.array(Image.open(image_path)) / 255.0
+
+    transform = transforms.Compose([transforms.ToTensor()])
+    input_tensor = transform(image).type(torch.FloatTensor)
+    input_tensor = input_tensor[None]  # expand dimension
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    input_tensor.to(device)
+    prediction = ort_inference(model, input_tensor)
+    softmax = torch.nn.Softmax(dim=1)
+    prediction = softmax(prediction)
+    prediction = prediction.detach().cpu().numpy()
+
+    return prediction
+
+
+def apply_model_image_onxx(image_path, model):
+    return 1.0 - predict_image_path_onxx(image_path, model=model)[0, 1]
+
+
+def apply_model_images_onxx(model_path, images_folder):
+    import onnxruntime as ort
+    import torch
+
+    providers = (
+        "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
+    )
+
+    model = ort.InferenceSession(model_path, providers=[providers])
+
+    images = glob.glob(f"{images_folder}/*/*.png")
+
+    predictions = []
+
+    for image_path in tqdm.tqdm(images):
+        predictions.append(apply_model_image_onxx(image_path, model=model))
+
+    target = [1 if "DNM" in path else 0 for path in images]
+
+    return images, target, predictions

@@ -1,8 +1,8 @@
-'''
+"""
 augmentation.py
 
-Copyright (c) 2021 Karolis Sablauskas
-Copyright (c) 2021 Gelana Khazeeva
+Copyright (c) 2023 Karolis Sablauskas
+Copyright (c) 2023 Gelana Khazeeva
 
 This file is part of DeNovoCNN.
 
@@ -18,17 +18,26 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
-'''
+"""
+
+import numpy as np
 
 from denovonet.settings import NUCLEOTIDES
-import numpy as np
 
 
 class CustomAugmentation(object):
-    """ Defines a custom augmentation class. Randomly applies one of transformations."""
+    """Defines a custom augmentation class. Randomly applies one of transformations."""
 
-    def __init__(self, probability=0.9, reads_cropping=False, reads_shuffling=False, multi_nucleotide_snp=False,
-                 nucleotides_relabeling=False, channels_switching=False, seed=None):
+    def __init__(
+        self,
+        probability=0.9,
+        reads_cropping=False,
+        reads_shuffling=False,
+        multi_nucleotide_snp=False,
+        nucleotides_relabeling=False,
+        channels_switching=False,
+        seed=None,
+    ):
         self.probability = probability
         self.reads_cropping = reads_cropping
         self.reads_shuffling = reads_shuffling
@@ -42,7 +51,7 @@ class CustomAugmentation(object):
 
     def _check_augmentations(self):
         """
-            Creates augmentations list.
+        Creates augmentations list.
         """
 
         self.transformations = []
@@ -61,11 +70,13 @@ class CustomAugmentation(object):
     @staticmethod
     def _reads_cropping(img):
         """
-            Returns image with randomly cropped reads.
+        Returns image with randomly cropped reads.
         """
         new_img = img.copy()
 
-        nreads_c, nreads_f, nreads_m = tuple(np.sum(np.sum(new_img, axis=1) > 0., axis=0))
+        nreads_c, nreads_f, nreads_m = tuple(
+            np.sum(np.sum(new_img, axis=1) > 0.0, axis=0)
+        )
 
         nreads_c = max(5, nreads_c)
         nreads_f = max(5, nreads_f)
@@ -75,17 +86,17 @@ class CustomAugmentation(object):
         nreads_f = np.random.choice(np.arange(5, nreads_f + 1))
         nreads_m = np.random.choice(np.arange(5, nreads_m + 1))
 
-        new_img[nreads_c:, :, 0] = 0.
-        new_img[nreads_f:, :, 1] = 0.
-        new_img[nreads_m:, :, 2] = 0.
+        new_img[nreads_c:, :, 0] = 0.0
+        new_img[nreads_f:, :, 1] = 0.0
+        new_img[nreads_m:, :, 2] = 0.0
 
         return new_img
 
     @staticmethod
     def _nucleotides_relabeling(img):
         """
-            Returns image with nucleotides relabeled (swapped),
-            for example A->T, T->C, C->G, G->A.
+        Returns image with nucleotides relabeled (swapped),
+        for example A->T, T->C, C->G, G->A.
         """
         new_img = img.copy()
 
@@ -99,13 +110,13 @@ class CustomAugmentation(object):
     @staticmethod
     def _multi_nucleotide_snp(img):
         """
-            Returns image with added SNP to the left or
-            to the right of original SNP.
+        Returns image with added SNP to the left or
+        to the right of original SNP.
         """
 
         def differ_array(arr):
             """
-                Randomly changes original array
+            Randomly changes original array
             """
 
             for_mask = np.sum(np.sum(arr > 0, axis=2), axis=0)
@@ -125,29 +136,37 @@ class CustomAugmentation(object):
 
         def get_rearranged_snp(snp, n=1):
             """
-                Applies random nucleotides relabeling to snp to get different snp.
+            Applies random nucleotides relabeling to snp to get different snp.
             """
             image_new = np.tile(snp, (1, n, 1))
 
             for i in range(n):
-                image_new[:, i * NUCLEOTIDES:(i + 1) * NUCLEOTIDES, :] = CustomAugmentation._nucleotides_relabeling(
-                    image_new[:, i * NUCLEOTIDES:(i + 1) * NUCLEOTIDES, :])
+                image_new[
+                    :, i * NUCLEOTIDES : (i + 1) * NUCLEOTIDES, :
+                ] = CustomAugmentation._nucleotides_relabeling(
+                    image_new[:, i * NUCLEOTIDES : (i + 1) * NUCLEOTIDES, :]
+                )
 
             return image_new
 
         def insert_snp_left(image, n=1):
             """
-                Insertion of the new SNP to the left.
+            Insertion of the new SNP to the left.
             """
             image_new = image.copy()
-            image_new[:, :(20 - n) * NUCLEOTIDES, :] = image_new[:, n * NUCLEOTIDES:20 * NUCLEOTIDES, :].copy()
-            image_new[:, (20 - n) * NUCLEOTIDES: 20 * NUCLEOTIDES, :] = differ_array(
-                get_rearranged_snp(image_new[:, 20 * NUCLEOTIDES: 21 * NUCLEOTIDES, :], n))
+            image_new[:, : (20 - n) * NUCLEOTIDES, :] = image_new[
+                :, n * NUCLEOTIDES : 20 * NUCLEOTIDES, :
+            ].copy()
+            image_new[:, (20 - n) * NUCLEOTIDES : 20 * NUCLEOTIDES, :] = differ_array(
+                get_rearranged_snp(
+                    image_new[:, 20 * NUCLEOTIDES : 21 * NUCLEOTIDES, :], n
+                )
+            )
             return image_new
 
         def insert_snp_right(image, n=1):
             """
-                Insertion of the new SNP to the right.
+            Insertion of the new SNP to the right.
             """
             return insert_snp_left(image[:, ::-1, :], n)[:, ::-1, :]
 
@@ -159,11 +178,13 @@ class CustomAugmentation(object):
     @staticmethod
     def _reads_shuffling(img):
         """
-            Shuffling the reads order.
+        Shuffling the reads order.
         """
         new_img = img.copy()
 
-        nreads_c, nreads_f, nreads_m = tuple(np.sum(np.sum(new_img, axis=1) > 0., axis=0))
+        nreads_c, nreads_f, nreads_m = tuple(
+            np.sum(np.sum(new_img, axis=1) > 0.0, axis=0)
+        )
 
         np.random.shuffle(new_img[:nreads_c, :, 0])
         np.random.shuffle(new_img[:nreads_f, :, 1])
@@ -174,16 +195,19 @@ class CustomAugmentation(object):
     @staticmethod
     def _channels_switching(img):
         """
-            Switching parental channels.
+        Switching parental channels.
         """
         new_img = img.copy()
-        new_img[:, :, 1], new_img[:, :, 2] = new_img[:, :, 2].copy(), new_img[:, :, 1].copy()
+        new_img[:, :, 1], new_img[:, :, 2] = (
+            new_img[:, :, 2].copy(),
+            new_img[:, :, 1].copy(),
+        )
 
         return new_img
 
     def __call__(self, img):
         """
-            Applies random augmentation from the list.
+        Applies random augmentation from the list.
         """
 
         if img.shape[2] != 3:

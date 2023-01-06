@@ -1,4 +1,4 @@
-'''
+"""
 training.py
 
 Copyright (c) 2022 Karolis Sablauskas
@@ -18,36 +18,46 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
-'''
-import os
+"""
 import argparse
+import os
+
+import onnxruntime as ort
 import torch
-from torch import nn
-import torch.utils.data
 import torch.optim as optim
+import torch.utils.data
 import torchvision
 import torchvision.transforms as transforms
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+from torch import nn
 from tqdm import tqdm
-from sklearn.metrics import recall_score, precision_score, accuracy_score
-import onnxruntime as ort
-
 from utils import ImbalancedDatasetSampler, export_onnx_model, ort_inference
 
-
-
 # parse arguments
-parser = argparse.ArgumentParser(description='Use DeNovoCNN.')
+parser = argparse.ArgumentParser(description="Use DeNovoCNN.")
 
-parser.add_argument('--images', type=str, required=True,
-                    help='Path to the training images / val images, e.g "training_dataset/publish_images/insertion".')
-parser.add_argument('--workdir', type=str, required=True,
-                    help='Path to working directory, exporting model".')
-parser.add_argument('--outname', type=str, required=True,
-                    help='Name of the model".')
-parser.add_argument('--batch_size', default=32, type=int,
-                    help='Batch size for training and inference. Default 32.')
-parser.add_argument('--epochs', default=7, type=int,
-                    help='NUmber of epochs for training. Default 7.')
+parser.add_argument(
+    "--images",
+    type=str,
+    required=True,
+    help='Path to the training images / val images, e.g "training_dataset/publish_images/insertion".',
+)
+parser.add_argument(
+    "--workdir",
+    type=str,
+    required=True,
+    help='Path to working directory, exporting model".',
+)
+parser.add_argument("--outname", type=str, required=True, help='Name of the model".')
+parser.add_argument(
+    "--batch_size",
+    default=32,
+    type=int,
+    help="Batch size for training and inference. Default 32.",
+)
+parser.add_argument(
+    "--epochs", default=7, type=int, help="NUmber of epochs for training. Default 7."
+)
 args = parser.parse_args()
 
 # Additional transforms, e.g. normalization can be added in the future
@@ -58,8 +68,7 @@ root_folder = args.images
 path_to_train_images = os.path.join(root_folder, "train")
 
 trainset = torchvision.datasets.ImageFolder(
-    root=path_to_train_images,
-    transform=transform
+    root=path_to_train_images, transform=transform
 )
 
 trainloader = torch.utils.data.DataLoader(
@@ -70,24 +79,22 @@ trainloader = torch.utils.data.DataLoader(
 )
 
 path_to_val_images = os.path.join(root_folder, "val")
-valset = torchvision.datasets.ImageFolder(
-    root=path_to_val_images,
-    transform=transform
+valset = torchvision.datasets.ImageFolder(root=path_to_val_images, transform=transform)
+valloader = torch.utils.data.DataLoader(
+    valset, batch_size=1, shuffle=False, num_workers=4
 )
-valloader = torch.utils.data.DataLoader(valset, batch_size=1,
-                                          shuffle=False, num_workers=4)
 
 path_to_test_images = os.path.join(root_folder, "test")
 testset = torchvision.datasets.ImageFolder(
-    root=path_to_test_images,
-    transform=transform
+    root=path_to_test_images, transform=transform
 )
 
-testloader = torch.utils.data.DataLoader(testset, batch_size=1,
-                                          shuffle=False, num_workers=4)
+testloader = torch.utils.data.DataLoader(
+    testset, batch_size=1, shuffle=False, num_workers=4
+)
 
 model = torchvision.models.resnet18(num_classes=2)
-device = ('cuda' if torch.cuda.is_available() else 'cpu')
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 
 criterion = nn.CrossEntropyLoss()
@@ -99,7 +106,7 @@ for epoch in range(args.epochs):
     for i, data in enumerate(tqdm(trainloader)):
         # get the inputs; data is a list of [inputs, labels]
         inputs, labels = data
-        
+
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -111,7 +118,7 @@ for epoch in range(args.epochs):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-    
+
     y_true = []
     y_pred = []
     model.eval()
@@ -123,13 +130,13 @@ for epoch in range(args.epochs):
             _, predicted = torch.max(outputs.data, 1)
             y_true.append(labels.detach().cpu()[0])
             y_pred.append(predicted.detach().cpu().numpy()[0])
-            
+
     recall = round(recall_score(y_true, y_pred), 4)
     precision = round(precision_score(y_true, y_pred), 4)
     acc = round(accuracy_score(y_true, y_pred), 4)
     print(f"Epoch: {epoch} - recall={recall} precision={precision} accuracy={acc}")
 
-print('Finished Training')
+print("Finished Training")
 
 # Export model
 if not os.path.exists(args.workdir):
@@ -138,10 +145,10 @@ output_path = os.path.join(args.workdir, f"{args.outname}.onnx")
 export_onnx_model(model, 3, 160, 164, output_path)
 print(f"Final model exported at {output_path}")
 
-providers = ('CUDAExecutionProvider' if torch.cuda.is_available() else 'CPUExecutionProvider')
-session = ort.InferenceSession(
-    output_path, providers=[providers]
+providers = (
+    "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
 )
+session = ort.InferenceSession(output_path, providers=[providers])
 
 y_true = []
 y_pred = []
@@ -152,11 +159,13 @@ for data in tqdm(testloader):
     labels = labels.to(device)
     outputs = ort_inference(session, inputs)
     _, predicted = torch.max(outputs.data, 1)
-    
+
     y_true.append(labels.detach().cpu()[0])
     y_pred.append(predicted.detach().cpu().numpy()[0])
-    
+
 recall = round(recall_score(y_true, y_pred), 4)
 precision = round(precision_score(y_true, y_pred), 4)
 acc = round(accuracy_score(y_true, y_pred), 4)
-print(f"Perfomance on the test dataset using ONNX model: recall={recall} precision={precision} accuracy={acc}")
+print(
+    f"Perfomance on the test dataset using ONNX model: recall={recall} precision={precision} accuracy={acc}"
+)

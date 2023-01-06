@@ -206,4 +206,3 @@ dependencies:
     - traitlets==5.1.1
     - typeguard==2.13.3
     - wcwidth==0.2.5
-

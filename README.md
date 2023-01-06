@@ -7,7 +7,7 @@ All Exon V5](https://www.agilent.com/cs/library/datasheets/public/AllExondatashe
 All Exon V4](https://www.agilent.com/cs/library/flyers/Public/5990-9857en_lo.pdf) capture kits.  <br>
 <br>
 DeNovoCNN returns a tab-separated file of format:
-> Chromosome | Start position | End position | Reference | Variant | DNM posterior probability | Mean coverage 
+> Chromosome | Start position | End position | Reference | Variant | DNM posterior probability | Mean coverage
 
 We used **DNM posterior probability >= 0.5** to create a filtered tab-separated file with the list of variants that are likely to be *de novo*.
 
@@ -23,10 +23,10 @@ DeNovoCNN reads BAM files and iterates through potential DNM locations using the
 <br>
 
 ## Manual installation
-We advise to use our docker container (see Usage section). In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment. 
+We advise to use our docker container (see Usage section). In case it's not possible, the easiest way of installing is creating an [Anaconda](https://www.anaconda.com/) environment.
 
 ```bash
-#Create environment 
+#Create environment
 cd .../DeNovoCNN
 conda env create -f environment.yml
 conda activate tensorflow_env
@@ -36,7 +36,7 @@ conda activate tensorflow_env
 
 ### Docker
 
-DeNovoCNN is available as a docker container. 
+DeNovoCNN is available as a docker container.
 
 The example of DeNovoCNN usage for prediction (to use pretrained models, corresponding arguments shoud remain unchanged):
 ```bash
@@ -58,7 +58,7 @@ docker run \
     --genome=/input/<REFERENCE_GENOME> \
     --output=predictions.csv
 ```
-Parameters description and usage are described earlier in the previous section. 
+Parameters description and usage are described earlier in the previous section.
 
 ### Singularity
 
@@ -86,7 +86,7 @@ singularity run -B YOUR_INPUT_DIRECTORY:/input,YOUR_OUTPUT_DIRECTORY:/output \
 
 
 ### Manual prediction
-To use the pretrained models, you can provide the paths to the models from 'models' folder. 
+To use the pretrained models, you can provide the paths to the models from 'models' folder.
 
 If you're running DeNovoCNN on WGS data, it is recommended to split the VCF files or variants of interest into 10 or more parts and run each of them separately and if possible in parallel. The separation could be done using the following commands:
 ```bash
@@ -96,7 +96,7 @@ If you're running DeNovoCNN on WGS data, it is recommended to split the VCF file
 ```
 The resulting list of variants could be passed as `-v` parameter. <br>
 <br>
-To run DeNovoCNN on all possible locations: 
+To run DeNovoCNN on all possible locations:
 ```bash
 cd .../DeNovoCNN
 
@@ -161,5 +161,5 @@ sudo apt install tabix
 ## License
 [GNU GPLv3](https://choosealicense.com/licenses/gpl-3.0/)
 
-Copyright (c) 2021 Karolis Sablauskas <br>
-Copyright (c) 2021 Gelana Khazeeva
+Copyright (c) 2023 Karolis Sablauskas <br>
+Copyright (c) 2023 Gelana Khazeeva

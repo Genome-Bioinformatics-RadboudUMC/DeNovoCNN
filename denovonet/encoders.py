@@ -1,8 +1,8 @@
-'''
+"""
 encoders.py
 
-Copyright (c) 2021 Karolis Sablauskas
-Copyright (c) 2021 Gelana Khazeeva
+Copyright (c) 2023 Karolis Sablauskas
+Copyright (c) 2023 Gelana Khazeeva
 
 This file is part of DeNovoCNN.
 
@@ -18,7 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
-'''
+"""
+
 
 class baseEncoder:
     EMPTY = 0
@@ -32,12 +33,14 @@ class baseEncoder:
     IN_G = 8
     DEL = 9
 
+
 class VariantClassValue:
     snp = 0
     deletion = 1
     insertion = 2
     unknown = 3
-    
+
+
 class VariantInheritance:
     DNM = 0
     IV = 1

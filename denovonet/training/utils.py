@@ -126,7 +126,7 @@ def export_onnx_model(model, image_channels, image_height, image_width, output_p
         input_names=["input"],  # the model's input names
         output_names=output_names,  # the model's output names
         dynamic_axes=dynamic_axes,
-        training="EVAL",
+        training=torch.onnx.TrainingMode.EVAL,
     )
 
 

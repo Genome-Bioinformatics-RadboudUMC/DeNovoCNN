@@ -28,10 +28,18 @@ import torch.optim as optim
 import torch.utils.data
 import torchvision
 import torchvision.transforms as transforms
-from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+)
 from torch import nn
 from tqdm import tqdm
-from utils import ImbalancedDatasetSampler, export_onnx_model, ort_inference
+from denovonet.training.utils import (
+    ImbalancedDatasetSampler,
+    export_onnx_model,
+    ort_inference,
+)
 
 # parse arguments
 parser = argparse.ArgumentParser(description="Use DeNovoCNN.")
@@ -58,114 +66,128 @@ parser.add_argument(
 parser.add_argument(
     "--epochs", default=7, type=int, help="NUmber of epochs for training. Default 7."
 )
-args = parser.parse_args()
 
-# Additional transforms, e.g. normalization can be added in the future
-transform = transforms.Compose([transforms.ToTensor()])
 
-batch_size = args.batch_size
-root_folder = args.images
-path_to_train_images = os.path.join(root_folder, "train")
+def training_pipeline(
+    batch_size: int, images_folder: str, epochs: int, workdir: str, outname: str
+) -> None:
 
-trainset = torchvision.datasets.ImageFolder(
-    root=path_to_train_images, transform=transform
-)
+    # Additional transforms, e.g. normalization can be added in the future
+    transform = transforms.Compose([transforms.ToTensor()])
+    path_to_train_images = os.path.join(images_folder, "train")
 
-trainloader = torch.utils.data.DataLoader(
-    trainset,
-    batch_size=batch_size,
-    sampler=ImbalancedDatasetSampler(trainset),
-    num_workers=4,
-)
+    trainset = torchvision.datasets.ImageFolder(
+        root=path_to_train_images, transform=transform
+    )
 
-path_to_val_images = os.path.join(root_folder, "val")
-valset = torchvision.datasets.ImageFolder(root=path_to_val_images, transform=transform)
-valloader = torch.utils.data.DataLoader(
-    valset, batch_size=1, shuffle=False, num_workers=4
-)
+    trainloader = torch.utils.data.DataLoader(
+        trainset,
+        batch_size=batch_size,
+        sampler=ImbalancedDatasetSampler(trainset),
+        num_workers=4,
+    )
 
-path_to_test_images = os.path.join(root_folder, "test")
-testset = torchvision.datasets.ImageFolder(
-    root=path_to_test_images, transform=transform
-)
+    path_to_val_images = os.path.join(images_folder, "val")
+    valset = torchvision.datasets.ImageFolder(
+        root=path_to_val_images, transform=transform
+    )
+    valloader = torch.utils.data.DataLoader(
+        valset, batch_size=1, shuffle=False, num_workers=4
+    )
 
-testloader = torch.utils.data.DataLoader(
-    testset, batch_size=1, shuffle=False, num_workers=4
-)
+    path_to_test_images = os.path.join(images_folder, "test")
+    testset = torchvision.datasets.ImageFolder(
+        root=path_to_test_images, transform=transform
+    )
 
-model = torchvision.models.resnet18(num_classes=2)
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
+    testloader = torch.utils.data.DataLoader(
+        testset, batch_size=1, shuffle=False, num_workers=4
+    )
 
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=0.025, momentum=0.9)
+    model = torchvision.models.resnet18(num_classes=2)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
 
-for epoch in range(args.epochs):
-    model.train()
-    running_loss = 0.0
-    for i, data in enumerate(tqdm(trainloader)):
-        # get the inputs; data is a list of [inputs, labels]
-        inputs, labels = data
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=0.025, momentum=0.9)
 
-        inputs = inputs.to(device)
-        labels = labels.to(device)
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        for i, data in enumerate(tqdm(trainloader)):
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
 
-        # zero the parameter gradients
-        optimizer.zero_grad()
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
-        # forward + backward + optimize
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+            # zero the parameter gradients
+            optimizer.zero_grad()
+
+            # forward + backward + optimize
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+        y_true = []
+        y_pred = []
+        model.eval()
+        with torch.no_grad():
+            for (inputs, labels) in tqdm(valloader):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+                outputs = model(inputs)
+                _, predicted = torch.max(outputs.data, 1)
+                y_true.append(labels.detach().cpu()[0])
+                y_pred.append(predicted.detach().cpu().numpy()[0])
+
+        recall = round(recall_score(y_true, y_pred), 4)
+        precision = round(precision_score(y_true, y_pred), 4)
+        acc = round(accuracy_score(y_true, y_pred), 4)
+        print(f"Epoch: {epoch} - recall={recall} precision={precision} accuracy={acc}")
+
+    print("Finished Training")
+
+    # Export model
+    if not os.path.exists(workdir):
+        os.mkdir(workdir)
+    output_path = os.path.join(workdir, f"{outname}.onnx")
+    export_onnx_model(model, 3, 160, 164, output_path)
+    print(f"Final model exported at {output_path}")
+
+    providers = (
+        "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
+    )
+    session = ort.InferenceSession(output_path, providers=[providers])
 
     y_true = []
     y_pred = []
-    model.eval()
-    with torch.no_grad():
-        for (inputs, labels) in tqdm(valloader):
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            y_true.append(labels.detach().cpu()[0])
-            y_pred.append(predicted.detach().cpu().numpy()[0])
+
+    for data in tqdm(testloader):
+        inputs, labels = data
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        outputs = ort_inference(session, inputs)
+        _, predicted = torch.max(outputs.data, 1)
+
+        y_true.append(labels.detach().cpu()[0])
+        y_pred.append(predicted.detach().cpu().numpy()[0])
 
     recall = round(recall_score(y_true, y_pred), 4)
     precision = round(precision_score(y_true, y_pred), 4)
     acc = round(accuracy_score(y_true, y_pred), 4)
-    print(f"Epoch: {epoch} - recall={recall} precision={precision} accuracy={acc}")
+    print(
+        f"Perfomance on the test dataset using ONNX model: recall={recall} precision={precision} accuracy={acc}"
+    )
 
-print("Finished Training")
 
-# Export model
-if not os.path.exists(args.workdir):
-    os.mkdir(args.workdir)
-output_path = os.path.join(args.workdir, f"{args.outname}.onnx")
-export_onnx_model(model, 3, 160, 164, output_path)
-print(f"Final model exported at {output_path}")
-
-providers = (
-    "CUDAExecutionProvider" if torch.cuda.is_available() else "CPUExecutionProvider"
-)
-session = ort.InferenceSession(output_path, providers=[providers])
-
-y_true = []
-y_pred = []
-
-for data in tqdm(testloader):
-    inputs, labels = data
-    inputs = inputs.to(device)
-    labels = labels.to(device)
-    outputs = ort_inference(session, inputs)
-    _, predicted = torch.max(outputs.data, 1)
-
-    y_true.append(labels.detach().cpu()[0])
-    y_pred.append(predicted.detach().cpu().numpy()[0])
-
-recall = round(recall_score(y_true, y_pred), 4)
-precision = round(precision_score(y_true, y_pred), 4)
-acc = round(accuracy_score(y_true, y_pred), 4)
-print(
-    f"Perfomance on the test dataset using ONNX model: recall={recall} precision={precision} accuracy={acc}"
-)
+if __name__ == "main":
+    args = parser.parse_args()
+    training_pipeline(
+        batch_size=args.batch_size,
+        images_folder=args.images,
+        epochs=args.epochs,
+        workdir=args.workdir,
+        outname=args.outname,
+    )

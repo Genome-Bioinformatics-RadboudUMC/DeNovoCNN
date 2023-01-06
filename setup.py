@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='denovonet',
+    name="denovonet",
     packages=find_packages(),
 )

@@ -1,8 +1,8 @@
-'''
+"""
 settings.py
 
-Copyright (c) 2021 Karolis Sablauskas
-Copyright (c) 2021 Gelana Khazeeva
+Copyright (c) 2023 Karolis Sablauskas
+Copyright (c) 2023 Gelana Khazeeva
 
 This file is part of DeNovoCNN.
 
@@ -18,15 +18,14 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
-'''
+"""
 
 # IMAGE PARAMETERS
-OVERHANG = 20 # number of nucleotides to each side of the center
+OVERHANG = 20  # number of nucleotides to each side of the center
 PLACEHOLDER_WIDTH = 2 * OVERHANG + 1
 
 NUCLEOTIDES = 4
 
-IMAGE_CHANNELS = 3 #RGB image
+IMAGE_CHANNELS = 3  # RGB image
 IMAGE_WIDTH = NUCLEOTIDES * (2 * OVERHANG + 1)
-IMAGE_HEIGHT = 160 # pileup height (= image height)
-
+IMAGE_HEIGHT = 160  # pileup height (= image height)

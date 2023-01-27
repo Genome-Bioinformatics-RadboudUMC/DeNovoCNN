@@ -17,11 +17,14 @@ if [[ ("$1" == "-h") || ("$1" == "--help") ]]; then
   echo "    -r,--region : Chromosome to analyse (1, 2, ... 22, X)."
   echo "    -g,--genome : Reference genome path."
   echo "    -df,--output_denovocnn_format: true or false,  default: false. If set to true, the output file will contain normalized variants and end coordinate."
+  echo "    -nci, --not_convert_to_inner_format: if specified, then code does not change insertions positions to the internal representation (the input insertion variants then should be already converted)."
   echo "    -o,--output : Output file name (will be saved to workdir)."
   exit 0
 fi
 
 # Parsing of the input arguments
+NOT_CONVERT_TO_INNER_FORMAT=""
+
 for i in "$@"
 do
 case $i in
@@ -79,6 +82,10 @@ case $i in
     ;;
     -df=*|--output_denovocnn_format=*)
     OUTPUT_DENOVOCNN_FORMAT="${i#*=}"
+    shift
+    ;;
+    -nci*|--not_convert_to_inner_format*)
+    NOT_CONVERT_TO_INNER_FORMAT="--not_convert_to_inner_format"
     shift
     ;;
     -o=*|--output=*)
@@ -230,7 +237,8 @@ KERAS_BACKEND=tensorflow python $script_path/main.py \
 --del_model=$DEL_MODEL \
 --variants_list=$VARIANTS_LIST \
 --output_denovocnn_format=$OUTPUT_DENOVOCNN_FORMAT \
---output_path=$WORKDIR/$OUTPUT
+--output_path=$WORKDIR/$OUTPUT \
+$NOT_CONVERT_TO_INNER_FORMAT
 
 echo "DenovoCNN finished."
 echo "Output in:"

@@ -58,6 +58,9 @@ parser.add_argument('--output_denovocnn_format', dest='output_denovocnn_format',
                     help='Should be true or false, default: false. ' +
                          'If set to true, the output file will contain normalized variants and end coordinate')
 
+parser.add_argument('--not_convert_to_inner_format', dest='convert_to_inner_format', action='store_false',
+                    help='If passed, then code does not change insertions positions to the umc internal representation.')
+
 parser.add_argument('--output_path', dest='output_path', default='output.txt', type=str,
                     help='Path to output file with DeNovoCNN predictions.')
 
@@ -73,6 +76,8 @@ if __name__ == "__main__":
     
     # prediction of the DeNovoCNN
     elif args.mode == 'predict':
+        print ("inner format:", args.convert_to_inner_format)
+
         apply_models_on_trio(
             variants_list=args.variants_list,
             output_path=args.output_path,
@@ -84,7 +89,7 @@ if __name__ == "__main__":
             ins_model=args.ins_model,
             ref_genome=args.ref_genome,
             output_denovocnn_format=args.output_denovocnn_format,
-            convert_to_inner_format=True,
+            convert_to_inner_format=args.convert_to_inner_format,
             n_jobs=-1
         )
 

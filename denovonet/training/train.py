@@ -113,7 +113,7 @@ def training_pipeline(
 
     for epoch in range(epochs):
         model.train()
-        running_loss = 0.0
+        train_loss = 0
         for i, data in enumerate(tqdm(trainloader)):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -130,22 +130,32 @@ def training_pipeline(
             loss.backward()
             optimizer.step()
 
+            train_loss += loss.item() * batch_size
+        mean_train_loss = train_loss / len(trainset)
+
         y_true = []
         y_pred = []
+        val_loss = 0
         model.eval()
         with torch.no_grad():
             for (inputs, labels) in tqdm(valloader):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 outputs = model(inputs)
+                loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
                 y_true.append(labels.detach().cpu()[0])
                 y_pred.append(predicted.detach().cpu().numpy()[0])
+                val_loss += loss.item() * batch_size
+
+        mean_val_loss = val_loss / len(valset)
 
         recall = round(recall_score(y_true, y_pred), 4)
         precision = round(precision_score(y_true, y_pred), 4)
         acc = round(accuracy_score(y_true, y_pred), 4)
-        print(f"Epoch: {epoch} - recall={recall} precision={precision} accuracy={acc}")
+        print(
+            f"Epoch: {epoch} - mean_train_loss={mean_train_loss} mean_val_loss={mean_val_loss} recall={recall} precision={precision} accuracy={acc}"
+        )
 
     print("Finished Training")
 

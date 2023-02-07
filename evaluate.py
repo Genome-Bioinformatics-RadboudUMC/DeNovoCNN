@@ -30,6 +30,52 @@ from matplotlib.axes import Axes
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import argparse
+
+
+parser = argparse.ArgumentParser(description="Evaluated trained models.")
+parser.add_argument(
+    "--images",
+    type=str,
+    required=True,
+    help='Path to the training images, e.g "training_dataset/publish_images/".',
+)
+parser.add_argument(
+    "--workdir",
+    type=str,
+    required=True,
+    help="Path to working directory, exporting figures.",
+)
+parser.add_argument(
+    "--snp-model",
+    type=str,
+    required=True,
+    help="Path to SNP model.",
+)
+parser.add_argument(
+    "--ins-model",
+    type=str,
+    required=True,
+    help="Path to insertion model.",
+)
+parser.add_argument(
+    "--del-model",
+    type=str,
+    required=True,
+    help="Path to deletion model.",
+)
+parser.add_argument(
+    "--metrics-path",
+    type=str,
+    required=True,
+    help="Path to metrics csv.",
+)
+parser.add_argument(
+    "--figure-path",
+    type=str,
+    required=True,
+    help="Path to figure.png.",
+)
 
 
 def calculate_metrics_for_paper(
@@ -163,3 +209,14 @@ def evaluate_models(
     plt.ylabel("Precision", fontsize=14)
     plt.xlabel("Recall", fontsize=14)
     plt.savefig(figure_out_path)
+
+
+args = parser.parse_args()
+evaluate_models(
+    images_folder=args.images,
+    model_sub_path=args.snp_model,
+    model_in_path=args.ins_model,
+    model_del_path=args.del_model,
+    metrics_out_path=args.metrics_path,
+    figure_out_path=args.figure_path,
+)

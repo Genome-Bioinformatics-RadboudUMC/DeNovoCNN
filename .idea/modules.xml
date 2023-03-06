@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/DeNovoCNN.iml" filepath="$PROJECT_DIR$/.idea/DeNovoCNN.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/LRS_img_fix.iml" filepath="$PROJECT_DIR$/.idea/LRS_img_fix.iml" />
     </modules>
   </component>
 </project>

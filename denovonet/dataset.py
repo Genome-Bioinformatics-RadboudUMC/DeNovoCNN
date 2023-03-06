@@ -32,6 +32,7 @@ import cv2
 import pysam
 import tensorflow as tf
 from denovonet.variants import SingleVariant, TrioVariant
+from denovonet.encoders import baseEncoder
 
 
 class Dataset:
@@ -352,7 +353,7 @@ def update_query_names(query_names_df, new_query_names):
     return query_names_df
 
 
-def get_single_variant_encodings(bam, middle, ref_path):
+def get_single_variant_encodings(bam, middle, chromosome, ref_path):
     reference_genome = pysam.FastaFile(ref_path)
     middle -= 1
     query_names_df = pd.DataFrame([])
@@ -435,7 +436,7 @@ class SimpVar:
         self.positions = update_positions(positions)
 
 
-def align_data(child_var, father_var, mother_var):
+def align_data(child_var, father_var, mother_var, start):
     child_df = pd.DataFrame(child_var.pileup_encoded, columns=child_var.positions)
     child_df['tag'] = 'child_pileup'
 
@@ -485,11 +486,11 @@ def get_image(row, reference_genome_path):
     chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
     # create image with new encoding
-    child_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(child_bam), start, reference_genome_path))
-    father_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(father_bam), start, reference_genome_path))
-    mother_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(mother_bam), start, reference_genome_path))
+    child_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(child_bam), start, chromosome, reference_genome_path))
+    father_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(father_bam), start, chromosome, reference_genome_path))
+    mother_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(mother_bam), start, chromosome, reference_genome_path))
 
-    child_var, father_var, mother_var = align_data(child_var, father_var, mother_var)
+    child_var, father_var, mother_var = align_data(child_var, father_var, mother_var, start)
     trio = TrioVariant(child_var, father_var, mother_var)
 
     return trio

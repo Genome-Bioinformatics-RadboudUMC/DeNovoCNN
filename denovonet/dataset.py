@@ -244,6 +244,237 @@ def load_variant(chromosome, start, end, bam, reference_genome):
         else:
             raise
 
+# New Image encoding:
+def parse_insertion(line):
+    if '+' not in line:
+        return []
+
+    line = line.split('+')[1]
+    inserted_bases = ['IN_' + i for i in line if not i.isdigit()]
+
+    return inserted_bases
+
+
+def merge_lists(lists):
+    merged_lists = np.empty([len(lists), len(max(lists, key=lambda lst: len(lst)))], dtype='U4')
+
+    for i, lst in enumerate(lists):
+        merged_lists[i][0:len(lst)] = lst
+
+    return merged_lists
+
+
+def process_pileup(cur_sequences, middle):
+    cur_sequences['is_snp'] = ~(
+            cur_sequences['annot'].str.contains(',') |
+            cur_sequences['annot'].str.contains('\.')
+    )
+
+    cur_sequences['is_del'] = cur_sequences['annot'].str.contains('\*')
+
+    cur_sequences['is_ins'] = cur_sequences['annot'].str.contains('\+')
+
+    # get insertions
+    cur_sequences['insertion'] = (
+        merge_lists(cur_sequences['annot'].str.upper().apply(parse_insertion).values).tolist()
+    )
+
+    ins_length = len(cur_sequences['insertion'].iloc[0])
+
+    # process base
+    cur_sequences['processed_base'] = cur_sequences['raw'].str.upper()
+    cur_sequences.loc[cur_sequences['annot'].str.contains('\*'), 'processed_base'] = 'DEL'
+
+    # process qualities
+
+    if cur_sequences.loc[~cur_sequences['is_del']].shape[0] > 0:
+        cur_sequences.loc[cur_sequences['is_del'], 'baseq'] = cur_sequences.loc[
+            ~cur_sequences['is_del'], 'baseq'].mean()
+    else:
+        cur_sequences.loc[cur_sequences['is_del'], 'baseq'] = 60.
+
+    is_middle = (cur_sequences['position'] == middle)
+
+    cur_sequences['processed_qual'] = cur_sequences['mapq'] * cur_sequences['baseq'] // 10
+    cur_sequences.loc[~cur_sequences['is_snp'] & ~cur_sequences['is_del'] & ~is_middle, 'processed_qual'] = (
+            cur_sequences.loc[~cur_sequences['is_snp'] & ~cur_sequences['is_del'] & ~is_middle, 'processed_qual'] // 3
+    )
+
+    cur_sequences['insertions_qual'] = cur_sequences['mapq'] * cur_sequences['baseq'] // 10
+
+    cur_sequences.loc[~cur_sequences['is_ins'] & ~is_middle, 'insertions_qual'] = (
+            cur_sequences.loc[~cur_sequences['is_ins'] & ~is_middle, 'insertions_qual'] // 3
+    )
+
+    # get bases
+
+    bases = np.hstack([cur_sequences[['processed_base']].values,
+                       np.array(cur_sequences.insertion.values.tolist())])
+
+    qualities = np.hstack([cur_sequences[['processed_qual']].values,
+                           cur_sequences[['insertions_qual'] * ins_length].values])
+
+    insertions_mask = np.hstack([np.zeros((1, 1)), np.ones((1, ins_length))])
+
+    return cur_sequences.index, bases, qualities, insertions_mask
+
+
+def get_encodings(encoding):
+    encoding_match = {
+        'DEL': baseEncoder.DEL,
+        'A': baseEncoder.A,
+        'C': baseEncoder.C,
+        'T': baseEncoder.T,
+        'G': baseEncoder.G,
+        'IN_A': baseEncoder.IN_A,
+        'IN_C': baseEncoder.IN_C,
+        'IN_T': baseEncoder.IN_T,
+        'IN_G': baseEncoder.IN_G,
+        'IN_N': baseEncoder.IN_A,
+    }
+
+    return encoding_match.get(encoding, baseEncoder.EMPTY)
+
+
+get_encodings_vectorized = np.vectorize(get_encodings)
+
+
+def update_query_names(query_names_df, new_query_names):
+    """
+        Keep names of the reads in a right order.
+    """
+    query_names_df = pd.concat([query_names_df,
+                                pd.DataFrame(new_query_names, columns=['query_name'])])
+
+    query_names_df = query_names_df.drop_duplicates(subset='query_name', keep='first').reset_index(drop=True)
+    query_names_df['idx'] = query_names_df.index
+
+    return query_names_df
+
+
+def get_single_variant_encodings(bam, middle, ref_path):
+    reference_genome = pysam.FastaFile(ref_path)
+    middle -= 1
+    query_names_df = pd.DataFrame([])
+
+    pileup_encoded = np.empty((160, 41 * 10), dtype='U4')
+    quality_encoded = np.zeros((160, 41 * 10), dtype='int')
+    insertions_mask_encoded = np.zeros((1, 41 * 10), dtype='int')
+    col_pointer = 0
+    positions = []
+
+    for pileup_column in bam.pileup(contig=chromosome, start=middle - 20, stop=middle + 20 + 1,
+                                    truncate=True, min_base_quality=0, fastafile=reference_genome):
+        cur_query_names = pileup_column.get_query_names()
+
+        query_names_df = update_query_names(query_names_df=query_names_df,
+                                            new_query_names=cur_query_names)
+
+        cur_sequences = pd.DataFrame([pileup_column.get_mapping_qualities(),
+                                      pileup_column.get_query_qualities(),
+                                      pileup_column.get_query_sequences(),
+                                      pileup_column.get_query_sequences(mark_matches=True, add_indels=True),
+                                      ], columns=cur_query_names, index=['mapq', 'baseq', 'raw', 'annot']
+                                     ).transpose()
+        #         return cur_sequences
+
+        cur_sequences['position'] = pileup_column.reference_pos
+
+        indexes, bases, qualities, insertions_mask = process_pileup(cur_sequences, middle)
+        indexes = query_names_df.set_index('query_name').loc[indexes.values, 'idx']
+
+        _, col_added = bases.shape
+
+        pileup_encoded[indexes, col_pointer:col_pointer + col_added] = bases
+        quality_encoded[indexes, col_pointer:col_pointer + col_added] = qualities
+        insertions_mask_encoded[0:1, col_pointer:col_pointer + col_added] = insertions_mask
+
+        positions += [cur_sequences['position'].iloc[0]] * col_added
+
+        col_pointer += col_added
+
+    middle_col = positions.index(middle)
+
+    pileup_encoded = pileup_encoded[:, middle_col - 20:middle_col + 20 + 1]
+    quality_encoded = quality_encoded[:, middle_col - 20:middle_col + 20 + 1]
+    insertions_mask_encoded = insertions_mask_encoded[:, middle_col - 20:middle_col + 20 + 1]
+    positions = positions[middle_col - 20:middle_col + 20 + 1]
+
+    pileup_encoded = get_encodings_vectorized(pileup_encoded)
+    quality_encoded = quality_encoded.astype(int)
+    quality_encoded[quality_encoded > 255] = 255
+
+    return pileup_encoded, quality_encoded, positions
+
+
+# def align_insertions(child, father, mother):
+def update_positions(positions):
+    new_positions = []
+
+    counter = 0
+    for idx, pos in enumerate(positions):
+
+        if idx == 0:
+            new_positions.append(str(pos))
+            continue
+
+        if pos == positions[idx - 1]:
+            counter += 1
+            new_positions.append(str(pos) + "_" + str(counter))
+        else:
+            counter = 0
+            new_positions.append(str(pos))
+
+    return new_positions
+
+
+class SimpVar:
+    def __init__(self, pileup, quality, positions):
+        self.pileup_encoded = pileup
+        self.quality_encoded = quality
+        self.positions = update_positions(positions)
+
+
+def align_data(child_var, father_var, mother_var):
+    child_df = pd.DataFrame(child_var.pileup_encoded, columns=child_var.positions)
+    child_df['tag'] = 'child_pileup'
+
+    mother_df = pd.DataFrame(mother_var.pileup_encoded, columns=mother_var.positions)
+    mother_df['tag'] = 'mother_pileup'
+
+    father_df = pd.DataFrame(father_var.pileup_encoded, columns=father_var.positions)
+    father_df['tag'] = 'father_pileup'
+
+    child_df_q = pd.DataFrame(child_var.quality_encoded, columns=child_var.positions)
+    child_df_q['tag'] = 'child_qual'
+
+    mother_df_q = pd.DataFrame(mother_var.quality_encoded, columns=mother_var.positions)
+    mother_df_q['tag'] = 'mother_qual'
+
+    father_df_q = pd.DataFrame(father_var.quality_encoded, columns=father_var.positions)
+    father_df_q['tag'] = 'father_qual'
+
+    merged_df = pd.concat([child_df, mother_df, father_df, child_df_q, mother_df_q, father_df_q]).fillna(0)
+
+    positions_order = sorted([col for col in merged_df.columns if col != 'tag'])
+    middle_col = positions_order.index(str(start))
+    positions_order = positions_order[middle_col - 20:middle_col + 20 + 1]
+
+    child_var.pileup_encoded = merged_df[merged_df['tag'] == 'child_pileup'][positions_order].values
+    father_var.pileup_encoded = merged_df[merged_df['tag'] == 'father_pileup'][positions_order].values
+    mother_var.pileup_encoded = merged_df[merged_df['tag'] == 'mother_pileup'][positions_order].values
+
+    child_var.quality_encoded = merged_df[merged_df['tag'] == 'child_qual'][positions_order].values
+    father_var.quality_encoded = merged_df[merged_df['tag'] == 'father_qual'][positions_order].values
+    mother_var.quality_encoded = merged_df[merged_df['tag'] == 'mother_qual'][positions_order].values
+
+    child_var.positions = positions_order
+    father_var.positions = positions_order
+    mother_var.positions = positions_order
+
+    return child_var, father_var, mother_var
+
+# Regular DeNovoCNN
 
 def get_image(row, reference_genome_path):
     """
@@ -253,14 +484,15 @@ def get_image(row, reference_genome_path):
     """
     chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
-    # create image
-    reference_genome = pysam.FastaFile(reference_genome_path)
-    child_variant = load_variant(str(chromosome), int(start), int(end), child_bam, reference_genome)
-    father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
-    mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
-    trio_variant = TrioVariant(child_variant, father_variant, mother_variant)
+    # create image with new encoding
+    child_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(child_bam), start, reference_genome_path))
+    father_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(father_bam), start, reference_genome_path))
+    mother_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(mother_bam), start, reference_genome_path))
 
-    return trio_variant
+    child_var, father_var, mother_var = align_data(child_var, father_var, mother_var)
+    trio = TrioVariant(child_var, father_var, mother_var)
+
+    return trio
 
 
 def save_image(row, folder, reference_genome_path):

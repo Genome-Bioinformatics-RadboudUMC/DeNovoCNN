@@ -394,6 +394,8 @@ def get_single_variant_encodings(bam, middle, chromosome, ref_path):
 
         col_pointer += col_added
 
+    if len(positions) == 0:
+        positions = range(middle - 20, middle + 20 + 1)
     middle_col = positions.index(middle)
 
     pileup_encoded = pileup_encoded[:, middle_col - 20:middle_col + 20 + 1]

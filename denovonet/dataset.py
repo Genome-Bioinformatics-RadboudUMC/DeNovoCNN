@@ -432,10 +432,11 @@ def update_positions(positions):
 
 
 class SimpVar:
-    def __init__(self, pileup, quality, positions):
+    def __init__(self, pileup, quality, positions, start_coverage):
         self.pileup_encoded = pileup
         self.quality_encoded = quality
         self.positions = update_positions(positions)
+        self.start_coverage = start_coverage
 
 
 def align_data(child_var, father_var, mother_var, start):
@@ -477,6 +478,10 @@ def align_data(child_var, father_var, mother_var, start):
 
     return child_var, father_var, mother_var
 
+def count_coverage(bam_data, chromosome, pos):
+    start_coverage_arrays = bam_data.count_coverage(chromosome, pos - 1, pos)
+    return sum([coverage[0] for coverage in start_coverage_arrays])
+
 # Regular DeNovoCNN
 
 def get_image(row, reference_genome_path):
@@ -485,12 +490,18 @@ def get_image(row, reference_genome_path):
     :param row: row from a processed dataframe
     :param reference_genome_path: path to a reference genome
     """
-    chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
+    chromosome, start, end, _, cbam, fbam, mbam, key, target = tuple(row)
 
+    child_bam = pysam.AlignmentFile(cbam)
+    father_bam = pysam.AlignmentFile(fbam)
+    mother_bam = pysam.AlignmentFile(mbam)
     # create image with new encoding
-    child_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(child_bam), start, chromosome, reference_genome_path))
-    father_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(father_bam), start, chromosome, reference_genome_path))
-    mother_var = SimpVar(*get_single_variant_encodings(pysam.AlignmentFile(mother_bam), start, chromosome, reference_genome_path))
+    child_var = SimpVar(*get_single_variant_encodings(child_bam, start, chromosome, reference_genome_path),
+                        count_coverage(child_bam, chromosome, start))
+    father_var = SimpVar(*get_single_variant_encodings(father_bam, start, chromosome, reference_genome_path),
+                         count_coverage(father_bam, chromosome, start))
+    mother_var = SimpVar(*get_single_variant_encodings(mother_bam, start, chromosome, reference_genome_path),
+                         count_coverage(mother_bam, chromosome, start))
 
     child_var, father_var, mother_var = align_data(child_var, father_var, mother_var, start)
     trio = TrioVariant(child_var, father_var, mother_var)

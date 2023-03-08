@@ -359,9 +359,9 @@ def get_single_variant_encodings(bam, middle, chromosome, ref_path):
     middle -= 1
     query_names_df = pd.DataFrame([])
 
-    pileup_encoded = np.empty((160, 41 * 10), dtype='U4')
-    quality_encoded = np.zeros((160, 41 * 10), dtype='int')
-    insertions_mask_encoded = np.zeros((1, 41 * 10), dtype='int')
+    pileup_encoded = np.empty((160, 41 * 100), dtype='U4')
+    quality_encoded = np.zeros((160, 41 * 100), dtype='int')
+    insertions_mask_encoded = np.zeros((1, 41 * 100), dtype='int')
     col_pointer = 0
     positions = []
 

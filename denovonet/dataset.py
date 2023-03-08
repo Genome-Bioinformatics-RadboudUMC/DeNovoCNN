@@ -121,6 +121,7 @@ class Dataset:
             # use all CPUs
             n_jobs = mp.cpu_count()
 
+        self.dataset = self.dataset[self.dataset['Variant type'] == 'Substitution']
         dataset_batches = self.dataset[['Chromosome', 'Start position std', 'End position std',
                                         'Variant type', 'Child BAM', 'Father BAM', 'Mother BAM'
                                         ]].values.tolist()

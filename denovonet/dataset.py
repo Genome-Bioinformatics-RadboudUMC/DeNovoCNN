@@ -555,9 +555,8 @@ def apply_model(row, models_dict, reference_genome_path):
     """
     _, _, _, var_type, _, _, _ = tuple(row)
 
-    trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
-
     try:
+        trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
         # predict
         prediction = trio_variant.predict(models_dict[var_type])
         prediction_dnm = str(round(1. - prediction[0, 0], 3))
@@ -565,10 +564,10 @@ def apply_model(row, models_dict, reference_genome_path):
         child_coverage = trio_variant.child_variant.start_coverage
         father_coverage = trio_variant.father_variant.start_coverage
         mother_coverage = trio_variant.mother_variant.start_coverage
-    except KeyError:
-        print("Failed in:")
-        print("\t", row)
-        raise
+    except:
+        print("Failed in:", flush=True)
+        print("\t", row, flush=True)
+        return -1, (-1, -1, -1)
 
     return prediction_dnm, (child_coverage, father_coverage, mother_coverage)
 

@@ -268,8 +268,7 @@ def merge_lists(lists):
 
 def process_pileup(cur_sequences, middle):
     cur_sequences['is_snp'] = ~(
-            cur_sequences['annot'].str.contains(',') |
-            cur_sequences['annot'].str.contains('\.')
+            cur_sequences['annot'].apply(lambda x: x[:1].lower()) == cur_sequences['reference'].apply(lambda x: x[:1].lower())
     )
 
     cur_sequences['is_del'] = cur_sequences['annot'].str.contains('\*')
@@ -364,9 +363,11 @@ def get_single_variant_encodings(bam, middle, chromosome, ref_path):
     insertions_mask_encoded = np.zeros((1, 41 * 100), dtype='int')
     col_pointer = 0
     positions = []
-
-    for pileup_column in bam.pileup(contig=chromosome, start=middle - 20, stop=middle + 20 + 1,
-                                    truncate=True, min_base_quality=0, fastafile=reference_genome):
+    
+    reference_seq = reference_genome.fetch(region=chromosome, start=middle - 20, end=middle + 20 + 1)
+    
+    for idx, pileup_column in enumerate(bam.pileup(contig=chromosome, start=middle - 20, stop=middle + 20 + 1,
+                                    truncate=True, min_base_quality=0)):
         cur_query_names = pileup_column.get_query_names()
 
         query_names_df = update_query_names(query_names_df=query_names_df,
@@ -379,7 +380,8 @@ def get_single_variant_encodings(bam, middle, chromosome, ref_path):
                                       ], columns=cur_query_names, index=['mapq', 'baseq', 'raw', 'annot']
                                      ).transpose()
         #         return cur_sequences
-
+        
+        cur_sequences['reference'] = reference_seq[idx]
         cur_sequences['position'] = pileup_column.reference_pos
 
         indexes, bases, qualities, insertions_mask = process_pileup(cur_sequences, middle)

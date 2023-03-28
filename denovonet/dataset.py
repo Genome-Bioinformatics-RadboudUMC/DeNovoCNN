@@ -385,7 +385,12 @@ def get_single_variant_encodings(bam, middle, chromosome, ref_path):
         cur_sequences['position'] = pileup_column.reference_pos
 
         indexes, bases, qualities, insertions_mask = process_pileup(cur_sequences, middle)
-        indexes = query_names_df.set_index('query_name').loc[indexes.values, 'idx']
+        indexes = query_names_df.set_index('query_name').loc[indexes.values, 'idx'].values
+        
+        # get only 160
+        bases = bases[indexes<160, :]
+        qualities = qualities[indexes<160, :]
+        indexes = indexes[indexes<160]
 
         _, col_added = bases.shape
 

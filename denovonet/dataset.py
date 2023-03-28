@@ -149,7 +149,6 @@ class Dataset:
 
         self.dataset[['Chromosome', 'Start position',
                       'Reference', 'Variant', 'DeNovoCNN probability',
-                      'Child coverage', 'Father coverage', 'Mother coverage',
                       'Child BAM', 'Father BAM', 'Mother BAM']].to_csv(output_path, sep='\t', index=False)
 
 

@@ -218,9 +218,7 @@ def remove_matching_nucleotides(row):
 
     return row
 
-# Changed encoding:
-
-
+# Changed to new encoding
 def get_image(row, reference_genome_path):
     """
     creates TrioVariant class object for a corresponding row from a processed dataframe

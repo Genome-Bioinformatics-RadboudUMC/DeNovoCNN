@@ -145,7 +145,7 @@ class Dataset:
         # flatten results
         results = [pred for sub_pred in results for pred in sub_pred]
 
-        self.dataset['DeNovoCNN probability'] = [res[0] for res in results]
+        self.dataset['DeNovoCNN probability'] = results
 
         self.dataset[['Chromosome', 'Start position',
                       'Reference', 'Variant', 'DeNovoCNN probability',

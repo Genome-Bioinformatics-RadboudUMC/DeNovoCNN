@@ -236,7 +236,7 @@ class SingleVariant():
             updates current positions based on cigar_value
         """
         # match
-        if cigar_value == 0:
+        if cigar_value == 0 or cigar_value == 7 or cigar_value == 8:
             base_position += cigar_num
             genome_position += cigar_num
         # insertion
@@ -283,7 +283,7 @@ class SingleVariant():
         current_quality = np.zeros_like((picture_step, ))
 
         # match
-        if cigar_value == 0:
+        if cigar_value == 0 or cigar_value == 7 or cigar_value == 8:
             current_quality = query_qualities[base_start_position:base_end_position] * mapq // 10
             matching_mask = (
                 np.array(list(seq[base_start_position:base_end_position])) == 
@@ -311,7 +311,7 @@ class SingleVariant():
         current_pileup = np.zeros_like((picture_step, ))
 
         # match and insertion
-        if cigar_value in (0, 1):
+        if cigar_value in (0, 1, 7, 8):
             #encode bases
             sub_seq = self._seq[base_start_position:base_end_position]
             current_pileup = self._get_encodings(cigar_value, sub_seq)
@@ -351,7 +351,7 @@ class SingleVariant():
             return result + baseEncoder.DEL
 
         for idx, base in enumerate(bases):
-            if cigar_value == 0:
+            if cigar_value == 0 or cigar_value == 7 or cigar_value == 8:
                 result[idx] = encoding_match.get(base, 0)
             
             if cigar_value == 1:
@@ -472,3 +472,136 @@ class TrioVariant():
         expanded_image = np.expand_dims(normalized_image, axis=0)
         prediction = model.predict(expanded_image)
         return prediction
+    
+class SingleVariantLRS(SingleVariant):
+    """
+    Class for encoding information from .bam files with LRS data
+    """
+    def __init__(self, chromosome, start, end, bam_path, REREFERENCE_GENOME):
+        self.haplotype_encoded = np.zeros((IMAGE_HEIGHT,)).astype(int)
+        self.phased_region_encoded = np.zeros((IMAGE_HEIGHT,)).astype(int)
+        super().__init__(chromosome, start, end, bam_path, REREFERENCE_GENOME)
+        
+    def encode_pileup(self):
+        reads = 0
+        for idx, read in enumerate(self.bam_data.fetch(reference=self.chromosome, start=self.start, end=self.end)):
+            reads += 1
+            if idx >= IMAGE_HEIGHT:
+                break
+            
+            # Get pileup and quality encodings
+            self.pileup_encoded[idx, :], self.quality_encoded[idx, :] = (
+                self._get_read_encoding(read, False)
+            )
+            
+            # Get haplotype encoding
+            if read.has_tag("HP"):
+                if (read.get_tag('HP') == 1) or (read.get_tag('HP') == 2):
+                    self.haplotype_encoded[idx] = read.get_tag("HP")
+            else:
+                self.haplotype_encoded[idx] = 3
+
+            # Get phased region encoding
+            if read.has_tag("PS"):
+                self.phased_region_encoded[idx] = read.get_tag("PS")
+            else:
+                self.phased_region_encoded[idx] = 0
+
+class TrioVariantLRS(TrioVariant):
+    def __init__(self, child_variant, father_variant, mother_variant):
+        # SingleVariantLRS objects for a trio
+        self.child_variant = child_variant
+        self.father_variant = father_variant
+        self.mother_variant = mother_variant
+
+        # Create singleton variant images
+        self.child_variant_image = self.create_singleton_variant_image(self.child_variant.pileup_encoded, self.child_variant.quality_encoded, self.child_variant.haplotype_encoded, self.child_variant.phased_region_encoded)
+        self.father_variant_image = self.create_singleton_variant_image(self.father_variant.pileup_encoded, self.father_variant.quality_encoded, self.father_variant.haplotype_encoded, self.father_variant.phased_region_encoded)
+        self.mother_variant_image = self.create_singleton_variant_image(self.mother_variant.pileup_encoded, self.mother_variant.quality_encoded, self.mother_variant.haplotype_encoded, self.mother_variant.phased_region_encoded)
+
+        # Combine singleton images
+        self.image = self.create_trio_variant_image()
+        
+    def create_singleton_variant_image(self, variant_pileup, variant_quality, variant_haplotype, variant_phased):
+        variant_image = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH))
+        
+        phasing_order = np.lexsort((-variant_phased, -variant_haplotype)) # sorts first by haplotype and uses phased value as a tie-breaker
+        variant_pileup = variant_pileup[phasing_order]
+        variant_quality = variant_quality[phasing_order]
+        variant_haplotype = variant_haplotype[phasing_order]
+        
+        hp1_count = np.sum(variant_haplotype == 1)
+        hp2_count = np.sum(variant_haplotype == 2)
+        hp0_count = np.sum(variant_haplotype == 3)
+        total_reads = hp1_count + hp2_count + hp0_count
+        
+        len_cond = np.array([(hp0_count>53), (hp1_count>53), (hp2_count>53)])
+        
+        if total_reads == 160:
+            start2 = hp0_count
+            start1 = hp0_count + hp2_count
+        elif len_cond[0]:
+            start2 = hp0_count
+            start1 = hp0_count + (IMAGE_HEIGHT-hp0_count)//2
+            if (hp1_count > (IMAGE_HEIGHT-hp0_count)//2) or (hp2_count > (IMAGE_HEIGHT-hp0_count)//2):
+                start2 = hp0_count
+                start1 = hp0_count + hp2_count
+        elif len_cond[2]:
+            start2 = (IMAGE_HEIGHT-hp2_count)//2
+            start1 = hp2_count + start2
+            if (hp1_count > (IMAGE_HEIGHT-hp2_count)//2) or (hp0_count > (IMAGE_HEIGHT-hp2_count)//2):
+                start2 = hp0_count
+                start1 = hp0_count + hp2_count
+        elif len_cond[1]:
+            start2 = (IMAGE_HEIGHT-hp1_count)//2
+            start1 = IMAGE_HEIGHT-hp1_count
+            if (hp0_count > (IMAGE_HEIGHT-hp1_count)//2) or (hp2_count > (IMAGE_HEIGHT-hp1_count)//2):
+                start2 = hp0_count
+                start1 = hp0_count + hp2_count
+        else:
+            start2 = 53
+            start1 = 106
+
+        for row_index, row in enumerate(variant_haplotype):
+            for column_index in range(PLACEHOLDER_WIDTH): 
+                pileup_coordinates = (row_index, column_index)
+                base = variant_pileup[pileup_coordinates]
+                pixel_value = variant_quality[pileup_coordinates]
+                
+                if row == 3:
+                    if base == baseEncoder.A or base == baseEncoder.IN_A:
+                        variant_image[row_index, column_index * 4 + 0] = pixel_value
+                    elif base == baseEncoder.C or base == baseEncoder.IN_C:
+                        variant_image[row_index, column_index * 4 + 1] = pixel_value
+                    elif base == baseEncoder.T or base == baseEncoder.IN_T:
+                        variant_image[row_index, column_index * 4 + 2] = pixel_value
+                    elif base == baseEncoder.G or base == baseEncoder.IN_G:
+                        variant_image[row_index, column_index * 4 + 3] = pixel_value
+                    elif base == baseEncoder.DEL:
+                        variant_image[row_index, column_index*4:column_index*4+4] = pixel_value
+                        
+                elif row == 2:
+                    if base == baseEncoder.A or base == baseEncoder.IN_A:
+                        variant_image[start2 + row_index - hp0_count, column_index * 4 + 0] = pixel_value
+                    elif base == baseEncoder.C or base == baseEncoder.IN_C:
+                        variant_image[start2 + row_index - hp0_count, column_index * 4 + 1] = pixel_value
+                    elif base == baseEncoder.T or base == baseEncoder.IN_T:
+                        variant_image[start2 + row_index - hp0_count, column_index * 4 + 2] = pixel_value
+                    elif base == baseEncoder.G or base == baseEncoder.IN_G:
+                        variant_image[start2 + row_index - hp0_count, column_index * 4 + 3] = pixel_value
+                    elif base == baseEncoder.DEL:
+                        variant_image[start2 + row_index - hp0_count, column_index*4:column_index*4+4] = pixel_value
+                                    
+                elif row == 1:
+                    if base == baseEncoder.A or base == baseEncoder.IN_A:
+                        variant_image[start1 + row_index - (hp0_count + hp2_count), column_index * 4 + 0] = pixel_value
+                    elif base == baseEncoder.C or base == baseEncoder.IN_C:
+                        variant_image[start1 + row_index - (hp0_count + hp2_count), column_index * 4 + 1] = pixel_value
+                    elif base == baseEncoder.T or base == baseEncoder.IN_T:
+                        variant_image[start1 + row_index - (hp0_count + hp2_count), column_index * 4 + 2] = pixel_value
+                    elif base == baseEncoder.G or base == baseEncoder.IN_G:
+                        variant_image[start1 + row_index - (hp0_count + hp2_count), column_index * 4 + 3] = pixel_value
+                    elif base == baseEncoder.DEL:
+                        variant_image[start1 + row_index - (hp0_count + hp2_count), column_index*4:column_index*4+4] = pixel_value
+
+        return variant_image

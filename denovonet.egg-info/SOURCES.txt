@@ -1,0 +1,13 @@
+LICENSE
+README.md
+setup.py
+denovonet/__init__.py
+denovonet/augmentation.py
+denovonet/dataset.py
+denovonet/encoders.py
+denovonet/settings.py
+denovonet/variants.py
+denovonet.egg-info/PKG-INFO
+denovonet.egg-info/SOURCES.txt
+denovonet.egg-info/dependency_links.txt
+denovonet.egg-info/top_level.txt

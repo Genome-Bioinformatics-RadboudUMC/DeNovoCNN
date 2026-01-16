@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#SBATCH --ntasks=1
+#SBATCH --nodes=1
+#SBATCH --output=/ifs/data/research/projects/ina/DeNovoCNN_project/logs/dataset_image_generation.out
+#SBATCH --error=/ifs/data/research/projects/ina/DeNovoCNN_project/logs/dataset_image_generation.err
+#SBATCH --partition=res-prio
+
+export PATH=/ifs/data/research/projects/ina/ina/miniconda3/envs/tensorflow_env/bin:/usr/bin
+
+cd /ifs/data/research/projects/ina/DeNovoCNN_project/code/DeNovoCNN/scripts
+
+python dataset_image_generation.py

@@ -79,49 +79,49 @@ def generate_images_per_trio(child_id, dataset_type, images_save_path):
         child_path = get_revio_bam_path(trios.loc[trios['child'] == child_id, 'child'].iloc[0])
         mother_path = get_revio_bam_path(trios.loc[trios['child'] == child_id, 'father'].iloc[0])
         father_path = get_revio_bam_path(trios.loc[trios['child'] == child_id, 'mother'].iloc[0])
-    except:
-        return None
     
-    # separate the dataset based on the type of the variant
-    variant_types_folders = ['substitution', 'insertion', 'deletion']
-    snp = dataset[(dataset['variant_type'] == 'snp')]
-    ins = dataset[(dataset['variant_type'] == 'ins')]
-    dels = dataset[(dataset['variant_type'] == 'del')]
-    variant_types = [snp, ins, dels]
-    
-    for sub_dataset, variant_type_folder in zip(variant_types, variant_types_folders) :
-        # print ("Processing", variant_type_folder, flush=True)
-        # separate DNMs and unknown
-        possible_DNMs = sub_dataset[(sub_dataset['DNM_status'] == "POSSIBLY_PHASED_DNM") & (sub_dataset['child'] == child_id)]
-        ivs = sub_dataset[(sub_dataset['DNM_status'] == "POSSIBLY_NOT_DNM") & (sub_dataset['child'] == child_id)]
-        # print(len(possible_DNMs))
+        # separate the dataset based on the type of the variant
+        variant_types_folders = ['substitution', 'insertion', 'deletion']
+        snp = dataset[(dataset['variant_type'] == 'snp')]
+        ins = dataset[(dataset['variant_type'] == 'ins')]
+        dels = dataset[(dataset['variant_type'] == 'del')]
+        variant_types = [snp, ins, dels]
         
-        # print(len(ivs))
-        
-        # generate DNM images
-        for row in range(len(possible_DNMs)):
-            sample = possible_DNMs.iloc[row]
+        for sub_dataset, variant_type_folder in zip(variant_types, variant_types_folders) :
+            # print ("Processing", variant_type_folder, flush=True)
+            # separate DNMs and unknown
+            possible_DNMs = sub_dataset[(sub_dataset['DNM_status'] == "POSSIBLY_PHASED_DNM") & (sub_dataset['child'] == child_id)]
+            ivs = sub_dataset[(sub_dataset['DNM_status'] == "POSSIBLY_NOT_DNM") & (sub_dataset['child'] == child_id)]
+            # print(len(possible_DNMs))
             
-            child = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, child_path, reference_genome)
-            father = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, father_path, reference_genome)
-            mother = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, mother_path, reference_genome)
-            trio = TrioVariantLRS(child, father, mother)
-            img_save_path = f"{images_save_path}/{variant_type_folder}/{dataset_type}/DNMs/{child_id}_{sample['chrom']}_pos{sample['pos']}.png"
-            #print (img_save_path, flush=True)
-            TrioVariantLRS.save_image(img_save_path, np.flip(trio.image,2))
-        
-        # generate IVs images
-        for row in range(len(ivs)):
-            sample = ivs.iloc[row]
+            # print(len(ivs))
             
-            child = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, child_path, reference_genome)
-            father = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, father_path, reference_genome)
-            mother = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, mother_path, reference_genome)
+            # generate DNM images
+            for row in range(len(possible_DNMs)):
+                sample = possible_DNMs.iloc[row]
+                
+                child = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, child_path, reference_genome)
+                father = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, father_path, reference_genome)
+                mother = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, mother_path, reference_genome)
+                trio = TrioVariantLRS(child, father, mother)
+                img_save_path = f"{images_save_path}/{variant_type_folder}/{dataset_type}/DNMs/{child_id}_{sample['chrom']}_pos{sample['pos']}.png"
+                #print (img_save_path, flush=True)
+                TrioVariantLRS.save_image(img_save_path, np.flip(trio.image,2))
+            
+            # generate IVs images
+            for row in range(len(ivs)):
+                sample = ivs.iloc[row]
+                
+                child = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, child_path, reference_genome)
+                father = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, father_path, reference_genome)
+                mother = SingleVariantLRS(sample['chrom'], int(sample['pos']), int(sample['pos']) + 1, mother_path, reference_genome)
 
-            trio = TrioVariantLRS(child, father, mother)
-            img_save_path = f"{images_save_path}/{variant_type_folder}/{dataset_type}/IVs/{child_id}_{sample['chrom']}_pos{sample['pos']}.png"
-            #print (img_save_path, flush=True)
-            TrioVariantLRS.save_image(img_save_path, np.flip(trio.image,2))
+                trio = TrioVariantLRS(child, father, mother)
+                img_save_path = f"{images_save_path}/{variant_type_folder}/{dataset_type}/IVs/{child_id}_{sample['chrom']}_pos{sample['pos']}.png"
+                #print (img_save_path, flush=True)
+                TrioVariantLRS.save_image(img_save_path, np.flip(trio.image,2))
+    except Exception as e:
+        print(f"Problem with {child_id} from {dataset_type} with error: {str(e)}")
     
     return None
 

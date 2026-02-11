@@ -31,7 +31,7 @@ import glob
 import cv2
 import pysam
 import tensorflow as tf
-from denovonet.variants import SingleVariant, TrioVariant
+from denovonet.variants import SingleVariant, TrioVariant, SingleVariantLRS, TrioVariantLRS
 
 
 class Dataset:
@@ -242,14 +242,14 @@ def load_variant(chromosome, start, end, bam, reference_genome):
     """
 
     try:
-        return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+        return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
     except (ValueError, KeyError):
         if chromosome[:3] != 'chr':
             chromosome = 'chr' + chromosome
-            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
         elif chromosome[:3] == 'chr':
             chromosome = chromosome[:3]
-            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
         else:
             raise
 
@@ -267,7 +267,7 @@ def get_image(row, reference_genome_path):
     child_variant = load_variant(str(chromosome), int(start), int(end), child_bam, reference_genome)
     father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
     mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
-    trio_variant = TrioVariant(child_variant, father_variant, mother_variant)
+    trio_variant = TrioVariantLRS(child_variant, father_variant, mother_variant)
 
     return trio_variant
 
@@ -299,12 +299,15 @@ def load_models(models_cfg):
     """
     loads Substitution, Deletion and Insertion models from paths specified in models_cfg
     """
-    models_dict = {
-        'Substitution': tf.keras.models.load_model(models_cfg['snp_model'], compile=False),
-        'Deletion': tf.keras.models.load_model(models_cfg['del_model'], compile=False),
-        'Insertion': tf.keras.models.load_model(models_cfg['ins_model'], compile=False)
-    }
-
+    models_dict = {}
+    
+    if models_cfg["snp_model"]:
+        models_dict['Substitution'] = tf.keras.models.load_model(models_cfg['snp_model'], compile=False)
+    if models_cfg["del_model"]:
+        models_dict['Deletion'] = tf.keras.models.load_model(models_cfg['del_model'], compile=False)
+    if models_cfg["ins_model"]:
+        models_dict['Insertion'] = tf.keras.models.load_model(models_cfg['ins_model'], compile=False)
+    
     return models_dict
 
 
@@ -316,6 +319,9 @@ def apply_model(row, models_dict, reference_genome_path):
     :param reference_genome_path: path to a reference genome
     """
     _, _, _, var_type, _, _, _ = tuple(row)
+    
+    if var_type != 'Substitution':
+        return -1, (-1, -1, -1)
 
     trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
 

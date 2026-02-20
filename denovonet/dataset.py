@@ -244,6 +244,7 @@ def load_variant(chromosome, start, end, bam, reference_genome):
     try:
         return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
     except (ValueError, KeyError):
+        print(f"Exception in chr {chromosome}: Start position: {start}. End position: {end}. Bam: {bam}", flush=True)
         if chromosome[:3] != 'chr':
             chromosome = 'chr' + chromosome
             return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
@@ -262,13 +263,18 @@ def get_image(row, reference_genome_path):
     """
     chromosome, start, end, _, child_bam, father_bam, mother_bam, key, target = tuple(row)
 
-    # create image
-    reference_genome = pysam.FastaFile(reference_genome_path)
-    child_variant = load_variant(str(chromosome), int(start), int(end), child_bam, reference_genome)
-    father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
-    mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
-    trio_variant = TrioVariantLRS(child_variant, father_variant, mother_variant)
-
+    try:
+        # create image
+        reference_genome = pysam.FastaFile(reference_genome_path)
+        child_variant = load_variant(str(chromosome), int(start), int(end), child_bam, reference_genome)
+        mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
+        father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
+    
+        trio_variant = TrioVariantLRS(child_variant, father_variant, mother_variant)
+    except:
+        print (row, flush=True)
+        raise
+    
     return trio_variant
 
 

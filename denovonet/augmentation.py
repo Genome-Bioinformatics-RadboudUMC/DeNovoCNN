@@ -201,3 +201,93 @@ class CustomAugmentation(object):
             return transformation(img)
 
         return img
+    
+class CustomAugmentationLRS (CustomAugmentation):
+    """Defines an augmentation class specifically customized for LRS-encoded images"""
+    def __init__(self, probability=0.9, reads_cropping=False, reads_shuffling=False, multi_nucleotide_snp=False, 
+                 nucleotides_relabeling=False, channels_switching=False, seed=None):
+        super().__init__(probability, reads_cropping, reads_shuffling, multi_nucleotide_snp, 
+                         nucleotides_relabeling, channels_switching, seed)
+        
+    def _reads_cropping(img):
+        """
+        Crops reads randomly from different parts of the image (haplotypes)
+        """
+        new_img = img.copy()
+
+        nreads_c_hp0, nreads_f_hp0, nreads_m_hp0 = tuple(np.sum(np.sum(new_img[:52, :, :], axis=1) > 0., axis=0))
+        nreads_c_hp2, nreads_f_hp2, nreads_m_hp2 = tuple(np.sum(np.sum(new_img[53:105, :, :], axis=1) > 0., axis=0))
+        nreads_c_hp1, nreads_f_hp1, nreads_m_hp1 = tuple(np.sum(np.sum(new_img[106:, :, :], axis=1) > 0., axis=0))
+        
+        not_suitable = ((nreads_c_hp0 > 53) or (nreads_c_hp2 > 53) or (nreads_c_hp1 > 53) or 
+        (nreads_f_hp0 > 53) or (nreads_f_hp2 > 53) or (nreads_f_hp1 > 53) or 
+        (nreads_m_hp0 > 53) or (nreads_m_hp2 > 53) or (nreads_m_hp1 > 53))
+        
+        # if one of the channels has too many reads for one of the haplotypes, no augmentation
+        if not_suitable:
+            return new_img
+
+        nreads_c_hp0, nreads_f_hp0, nreads_m_hp0 = tuple(np.max(3, nreads_c_hp0), np.max(3, nreads_f_hp0), np.max(3, nreads_m_hp0))
+        nreads_c_hp1, nreads_f_hp1, nreads_m_hp1 = tuple(np.max(3, nreads_c_hp1), np.max(3, nreads_f_hp1), np.max(3, nreads_m_hp1))
+        nreads_c_hp2, nreads_f_hp2, nreads_m_hp2 = tuple(np.max(3, nreads_c_hp2), np.max(3, nreads_f_hp2), np.max(3, nreads_m_hp2))
+        
+        nreads_c_hp0, nreads_f_hp0, nreads_m_hp0 = tuple(np.random.choice(np.arange(3, nreads_c_hp0 + 1)), np.random.choice(np.arange(3, nreads_f_hp0 + 1)), np.random.choice(np.arange(3, nreads_m_hp0 + 1)))
+        nreads_c_hp1, nreads_f_hp1, nreads_m_hp1 = tuple(np.random.choice(np.arange(3, nreads_c_hp1 + 1)), np.random.choice(np.arange(3, nreads_f_hp1 + 1)), np.random.choice(np.arange(3, nreads_m_hp1 + 1)))
+        nreads_c_hp2, nreads_f_hp2, nreads_m_hp2 = tuple(np.random.choice(np.arange(3, nreads_c_hp2 + 1)), np.random.choice(np.arange(3, nreads_f_hp2 + 1)), np.random.choice(np.arange(3, nreads_m_hp2 + 1)))
+        
+        # haplotype 0:
+        new_img[nreads_c_hp0:52, :, 0] = 0.
+        new_img[nreads_f_hp0:52, :, 1] = 0.
+        new_img[nreads_m_hp0:52, :, 2] = 0.
+        
+        # haplotype 2:
+        new_img[(53 + nreads_c_hp2):105, :, 0] = 0.
+        new_img[(53 + nreads_f_hp2):105, :, 1] = 0.
+        new_img[(53 + nreads_m_hp2):105, :, 2] = 0.
+        
+        # haplotype 1:
+        new_img[(106 + nreads_c_hp1):, :, 0] = 0.
+        new_img[(106 + nreads_f_hp1):, :, 1] = 0.
+        new_img[(106 + nreads_m_hp1):, :, 2] = 0.
+        
+        return new_img
+    
+    def _reads_shuffling (img):
+        """
+        Shuffles the reads from the same haplotype randomly
+        """
+        new_img = img.copy()
+
+        nreads_c_hp0, nreads_f_hp0, nreads_m_hp0 = tuple(np.sum(np.sum(new_img[:52, :, :], axis=1) > 0., axis=0))
+        nreads_c_hp2, nreads_f_hp2, nreads_m_hp2 = tuple(np.sum(np.sum(new_img[53:105, :, :], axis=1) > 0., axis=0))
+        nreads_c_hp1, nreads_f_hp1, nreads_m_hp1 = tuple(np.sum(np.sum(new_img[106:, :, :], axis=1) > 0., axis=0))
+        
+        not_suitable = ((nreads_c_hp0 > 53) or (nreads_c_hp2 > 53) or (nreads_c_hp1 > 53) or 
+        (nreads_f_hp0 > 53) or (nreads_f_hp2 > 53) or (nreads_f_hp1 > 53) or 
+        (nreads_m_hp0 > 53) or (nreads_m_hp2 > 53) or (nreads_m_hp1 > 53))
+        
+        # if one of the channels has too many reads for one of the haplotypes, no augmentation
+        if not_suitable:
+            return new_img
+
+        np.random.shuffle(new_img[:nreads_c, :, 0])
+        np.random.shuffle(new_img[:nreads_f, :, 1])
+        np.random.shuffle(new_img[:nreads_m, :, 2])
+        
+        # haplotype 0:
+        np.random.shuffle(new_img[:nreads_c_hp0, :, 0])
+        np.random.shuffle(new_img[:nreads_f_hp0, :, 1])
+        np.random.shuffle(new_img[:nreads_m_hp0, :, 2])
+        
+        # haplotype 2:
+        np.random.shuffle(new_img[53:(53 + nreads_c_hp2), :, 0])
+        np.random.shuffle(new_img[53:(53 + nreads_f_hp2), :, 1])
+        np.random.shuffle(new_img[53:(53 + nreads_m_hp2), :, 2])
+        
+        # haplotype 1:
+        np.random.shuffle(new_img[106:(106 + nreads_c_hp1), :, 0])
+        np.random.shuffle(new_img[106:(106 + nreads_f_hp1), :, 1])
+        np.random.shuffle(new_img[106:(106 + nreads_m_hp1), :, 2])
+        
+        return new_img
+            

@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%files
+    . /app
+
+%post
+    apt-get update
+    apt-get install -y ffmpeg libsm6 libxext6
+
+    cd /app
+
+    conda env create -f environment.yml
+
+    export PATH=/opt/conda/envs/tensorflow_env/bin:$PATH
+
+    pip install -e /app
+
+    chmod +x /app/apply_denovocnn.sh
+    chmod -R 755 /app/models
+
+%environment
+    export PATH=/opt/conda/envs/tensorflow_env/bin:$PATH
+    export CONDA_DEFAULT_ENV=tensorflow_env
+    export PYTHONPATH=/app:$PYTHONPATH
+
+%runscript
+    exec /app/apply_denovocnn.sh "$@"

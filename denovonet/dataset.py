@@ -21,6 +21,8 @@ along with Foobar.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 import sys
 import numpy as np
 import pandas as pd
@@ -32,7 +34,6 @@ import cv2
 import pysam
 import tensorflow as tf
 from denovonet.variants import SingleVariant, TrioVariant
-
 
 class Dataset:
     """
@@ -98,7 +99,7 @@ class Dataset:
         sys.stdout.flush()
         start = datetime.datetime.now()
 
-        pool = mp.Pool(n_jobs)
+        pool = mp.Pool(n_jobs, initializer=init_worker, initargs=(models_cfg,))
 
         _ = pool.map(
             partial(save_image, folder=folder, reference_genome_path=reference_genome_path),
@@ -124,18 +125,27 @@ class Dataset:
                                         'Variant type', 'Child BAM', 'Father BAM', 'Mother BAM'
                                         ]].values.tolist()
 
-        dataset_batches = [dataset_batches[x:x + batch_size] for x in range(0, len(dataset_batches), batch_size)]
 
+        dataset_batches = [dataset_batches[x:x + batch_size] for x in range(0, len(dataset_batches), batch_size)]
         print(f"Using {n_jobs} CPUs")
+
         sys.stdout.flush()
         start = datetime.datetime.now()
 
-        pool = mp.Pool(n_jobs)
+        pool = mp.Pool(n_jobs, initializer=init_worker, initargs=(models_cfg,))
 
-        results = pool.map(
-            partial(apply_model_batch, models_cfg=models_cfg, reference_genome_path=reference_genome_path),
-            dataset_batches
-        )
+        results = []
+        total_batches = len(dataset_batches)
+
+        total = len(dataset_batches)
+        print(f"starting batch analysis of {total} batches")
+        for i, batch in enumerate(dataset_batches, 1):
+            batch_results = pool.map(
+                partial(debug_apply_model, reference_genome_path=reference_genome_path),
+                batch
+            )
+            results.extend(batch_results)
+            print(f"[{i}/{total}] ({i/total:.1%})", flush=True)
 
         pool.close()
         print("Applying DeNovoCNN finished, time elapsed:", datetime.datetime.now() - start)
@@ -240,15 +250,17 @@ def load_variant(chromosome, start, end, bam, reference_genome):
     :param reference_genome: reference genome AligmnentFile
     :return: SingleVariant class
     """
-
     try:
         return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
     except (ValueError, KeyError):
+        print(f"crash in generation of SingleVariant, attempting to rename {chromosome}")
         if chromosome[:3] != 'chr':
-            chromosome = 'chr' + chromosome
+            new_chromosome = 'chr' + chromosome
+            print(f"reatempted using {new_chromosome} instead of {chromosome}")
             return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
         elif chromosome[:3] == 'chr':
-            chromosome = chromosome[:3]
+            new_chromosome = chromosome[3:]
+            print(f"reatempted using {new_chromosome} instead of {chromosome}")
             return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
         else:
             raise
@@ -321,9 +333,10 @@ def apply_model(row, models_dict, reference_genome_path):
 
     try:
         # predict
-        prediction = trio_variant.predict(models_dict[var_type])
+        img = trio_variant.image.astype(np.float32)
+        img = np.expand_dims(img, axis=0)
+        prediction = models_dict[var_type].predict(img, verbose=0)
         prediction_dnm = str(round(1. - prediction[0, 0], 3))
-
         child_coverage = trio_variant.child_variant.start_coverage
         father_coverage = trio_variant.father_variant.start_coverage
         mother_coverage = trio_variant.mother_variant.start_coverage
@@ -334,13 +347,32 @@ def apply_model(row, models_dict, reference_genome_path):
 
     return prediction_dnm, (child_coverage, father_coverage, mother_coverage)
 
+global_models = None
+
+def init_worker(models_cfg):
+    global global_models
+    global_models = load_models(models_cfg)
+
+def debug_apply_model(row, reference_genome_path):
+    try:
+        global global_models
+        result = apply_model(row, global_models, reference_genome_path)
+        return result
+    except Exception as e:
+        print("FAILED VARIANT:", row, str(e), flush=True)
+        return None
 
 def apply_model_batch(rows, models_cfg, reference_genome_path):
-    """
-    applies  DeNovoCNN models from models_cfg to a batch of rows from a processed dataframe
-    """
     models_dict = load_models(models_cfg)
-    return [apply_model(row, models_dict, reference_genome_path) for row in rows]
+    results = []
+    for row in rows:
+        try:
+            result = apply_model(row, models_dict, reference_genome_path)
+            results.append(result)
+        except Exception as e:
+            print("FAILED VARIANT:", row, str(e), flush=True)
+            results.append(None)
+    return results
 
 
 def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, mother_bam,
@@ -373,7 +405,6 @@ def apply_models_on_trio(variants_list, output_path, child_bam, father_bam, moth
         dataset[f"{sample} BAM"] = trio_cfg[sample]['bam_path']
 
     print(f"Start apply in parallel, n_jobs={n_jobs}")
-
     # apply models
     dataset = Dataset(dataset=dataset, convert_to_inner_format=convert_to_inner_format)
 

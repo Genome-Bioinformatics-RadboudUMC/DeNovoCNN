@@ -100,6 +100,11 @@ class SingleVariant():
                 raise Exception("Chromosome for reference should be one of ", self.REFERENCE_GENOME.references)
 
     def encode_pileup(self):
+        """
+            Iterates over all the reads in the area of interest and
+            encodes every read as 2 numpy arrays:
+            encoded nucleotides and corresponding qualities
+        """
         for idx, read in enumerate(
             self.bam_data.fetch(reference=self.chromosome, start=self.start, end=self.end)
         ):
@@ -113,7 +118,7 @@ class SingleVariant():
                 print(
                     f"Error processing read for pileup, in variant "
                     f"{self.chromosome}:{self.start}-{self.end} "
-                    f"in bamfile {self.bam_path}, skipping it: {e}"
+                    f"in bamfile {self.bam_path}, skipping this read: {e}"
                 )
                 continue
             

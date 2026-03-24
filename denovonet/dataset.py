@@ -138,7 +138,7 @@ class Dataset:
         total_batches = len(dataset_batches)
 
         total = len(dataset_batches)
-        print(f"starting batch analysis of {total} batches")
+        print(f"starting analysis of {total} batches of potential denovos")
         for i, batch in enumerate(dataset_batches, 1):
             batch_results = pool.map(
                 partial(debug_apply_model, reference_genome_path=reference_genome_path),
@@ -150,9 +150,6 @@ class Dataset:
         pool.close()
         print("Applying DeNovoCNN finished, time elapsed:", datetime.datetime.now() - start)
         sys.stdout.flush()
-
-        # flattern results
-        results = [pred for sub_pred in results for pred in sub_pred]
 
         self.dataset['DeNovoCNN probability'] = [res[0] for res in results]
         self.dataset['Child coverage'] = [res[1][0] for res in results]
@@ -257,11 +254,11 @@ def load_variant(chromosome, start, end, bam, reference_genome):
         if chromosome[:3] != 'chr':
             new_chromosome = 'chr' + chromosome
             print(f"reatempted using {new_chromosome} instead of {chromosome}")
-            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariant(str(new_chromosome), int(start), int(end), bam, reference_genome)
         elif chromosome[:3] == 'chr':
             new_chromosome = chromosome[3:]
             print(f"reatempted using {new_chromosome} instead of {chromosome}")
-            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariant(str(new_chromosome), int(start), int(end), bam, reference_genome)
         else:
             raise
 
@@ -332,10 +329,7 @@ def apply_model(row, models_dict, reference_genome_path):
     trio_variant = get_image(tuple(row) + (None, None), reference_genome_path)
 
     try:
-        # predict
-        img = trio_variant.image.astype(np.float32)
-        img = np.expand_dims(img, axis=0)
-        prediction = models_dict[var_type].predict(img, verbose=0)
+        prediction = trio_variant.predict(models_dict[var_type])
         prediction_dnm = str(round(1. - prediction[0, 0], 3))
         child_coverage = trio_variant.child_variant.start_coverage
         father_coverage = trio_variant.father_variant.start_coverage
@@ -363,6 +357,9 @@ def debug_apply_model(row, reference_genome_path):
         return None
 
 def apply_model_batch(rows, models_cfg, reference_genome_path):
+    """
+    applies  DeNovoCNN models from models_cfg to a batch of rows from a processed dataframe
+    """
     models_dict = load_models(models_cfg)
     results = []
     for row in rows:

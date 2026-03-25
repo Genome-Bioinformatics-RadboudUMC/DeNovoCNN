@@ -59,7 +59,7 @@ class SingleVariant():
 
         # run encoding the variant as 2 numpy arrays
         self.encode_pileup()
-        
+
     # variant area: variant location +- N positions
     @property
     def region_start(self):
@@ -102,15 +102,25 @@ class SingleVariant():
     def encode_pileup(self):
         """
             Iterates over all the reads in the area of interest and
-            encodes every read as 2 numpy arrays: 
+            encodes every read as 2 numpy arrays:
             encoded nucleotides and corresponding qualities
         """
-        for idx, read in enumerate(self.bam_data.fetch(reference=self.chromosome, start=self.start, end=self.end)):
+        for idx, read in enumerate(
+            self.bam_data.fetch(reference=self.chromosome, start=self.start, end=self.end)
+        ):
             if idx >= IMAGE_HEIGHT:
                 break
-            self.pileup_encoded[idx, :], self.quality_encoded[idx, :] = (
-                self._get_read_encoding(read, False)
-            )
+            try:
+                enc, qual = self._get_read_encoding(read, False)
+                self.pileup_encoded[idx, :] = enc
+                self.quality_encoded[idx, :] = qual
+            except Exception as e:
+                print(
+                    f"Error processing read for pileup, in variant "
+                    f"{self.chromosome}:{self.start}-{self.end} "
+                    f"in bamfile {self.bam_path}, skipping this read: {e}"
+                )
+                continue
             
     def _get_read_encoding(self, read, debug=False):
         """

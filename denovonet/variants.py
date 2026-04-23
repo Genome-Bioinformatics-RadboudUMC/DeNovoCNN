@@ -129,8 +129,8 @@ class SingleVariant():
         quality = np.zeros((PLACEHOLDER_WIDTH, ))
 
         # get reference genome for read
-        self._ref = self.REFERENCE_GENOME.fetch(self.reference_chromosome, self._read.reference_start,
-                                                self._read.reference_start + 2*len(read.seq))
+        self._ref = self.REFERENCE_GENOME.fetch(self.reference_chromosome, self._read.reference_start, 
+                                                self._read.reference_end)
         
         # offset if reference_start before interest area [start - OVERHANG - 1, start + OVERHANG -1]
         offset = max(0, (self.start - OVERHANG - 1) - read.reference_start)

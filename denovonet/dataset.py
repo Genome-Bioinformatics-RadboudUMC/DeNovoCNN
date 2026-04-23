@@ -147,7 +147,7 @@ class Dataset:
             start=1
         ):
             results.append(result)
-            print(f"Completed batch {i}/{total_batches}, time elapsed: {datetime.datetime.now() - start}")
+            print(f"Completed batch {i}/{total_batches}, time elapsed: {datetime.datetime.now() - start}", flush=True)
 
         pool.close()
         pool.join()

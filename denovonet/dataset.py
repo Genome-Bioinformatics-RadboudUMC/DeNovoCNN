@@ -242,15 +242,15 @@ def load_variant(chromosome, start, end, bam, reference_genome):
     """
 
     try:
-        return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
+        return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
     except (ValueError, KeyError):
         print(f"Exception in chr {chromosome}: Start position: {start}. End position: {end}. Bam: {bam}", flush=True)
         if chromosome[:3] != 'chr':
             chromosome = 'chr' + chromosome
-            return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
         elif chromosome[:3] == 'chr':
             chromosome = chromosome[:3]
-            return SingleVariantLRS(str(chromosome), int(start), int(end), bam, reference_genome)
+            return SingleVariant(str(chromosome), int(start), int(end), bam, reference_genome)
         else:
             raise
 
@@ -270,7 +270,7 @@ def get_image(row, reference_genome_path):
         mother_variant = load_variant(str(chromosome), int(start), int(end), mother_bam, reference_genome)
         father_variant = load_variant(str(chromosome), int(start), int(end), father_bam, reference_genome)
     
-        trio_variant = TrioVariantLRS(child_variant, father_variant, mother_variant)
+        trio_variant = TrioVariant(child_variant, father_variant, mother_variant)
     except:
         print (row, flush=True)
         raise

@@ -136,7 +136,7 @@ class Dataset:
         total_batches = len(dataset_batches)
 
         for i, result in enumerate(
-            pool.imap_unordered(
+            pool.imap(
                 partial(
                     apply_model_batch,
                     models_cfg=models_cfg,
